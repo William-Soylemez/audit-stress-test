@@ -168,6 +168,7 @@ async def main():
             "user_gender_prefill", "user_gender_prefill_qwen",
             "user_gender_user_persona", "user_gender_user_persona_qwen",
             "user_gender_sae_desc",
+            "probe_evasion",
         ],
         help="Target environment",
     )

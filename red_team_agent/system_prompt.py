@@ -16,6 +16,8 @@ METHOD_NAMES = {
     # User gender environments (Qwen)
     "user_gender_prefill_qwen": "Prefill",
     "user_gender_user_persona_qwen": "User Persona",
+    # Probe evasion
+    "probe_evasion": "Activation Probe",
 }
 
 # Default paths for description files per environment
@@ -62,6 +64,12 @@ DEFAULT_DESCRIPTION_PATHS = {
         "method": "red_team_agent/method_descriptions/user_persona_user_gender.md",
         "target_model": "red_team_agent/target_model_descriptions/user_gender.md",
         "goal": "red_team_agent/goal_descriptions/user_gender_user_persona.md",
+    },
+    # Probe evasion
+    "probe_evasion": {
+        "method": "red_team_agent/method_descriptions/probe.md",
+        "target_model": "red_team_agent/target_model_descriptions/probe_evasion.md",
+        "goal": "red_team_agent/goal_descriptions/probe_evasion.md",
     },
 }
 
