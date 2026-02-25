@@ -77,9 +77,6 @@ def get_env(env_name: str):
     elif env_name == "user_gender_sae_desc":
         from envs.user_gender.user_gender_sae_desc.env import UserGenderSAEDesc, UserGenderSAEDescConfig
         env = UserGenderSAEDesc(UserGenderSAEDescConfig())
-    elif env_name == "probe_evasion":
-        from envs.probe_evasion.env import ProbeEvasionEnv, ProbeEvasionConfig
-        env = ProbeEvasionEnv(ProbeEvasionConfig())
     else:
         raise ValueError(f"Unknown environment: {env_name}")
 
@@ -191,8 +188,7 @@ def main():
                        choices=["ssc_prefill", "ssc_user_persona", "ssc_act_tokens",
                                 "user_gender_prefill", "user_gender_prefill_qwen",
                                 "user_gender_user_persona", "user_gender_user_persona_qwen",
-                                "user_gender_sae_desc",
-                                "probe_evasion"],
+                                "user_gender_sae_desc"],
                        help="Environment to load on startup")
     parser.add_argument("--port", type=int, default=8000,
                        help="Port to run on (default: 8000)")

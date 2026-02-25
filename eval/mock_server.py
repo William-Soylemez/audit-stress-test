@@ -44,7 +44,6 @@ def get_env(env_name: str):
     valid_envs = (
         "ssc_prefill", "ssc_user_persona", "ssc_act_tokens",
         "user_gender_prefill", "user_gender_user_persona", "user_gender_sae_desc",
-        "probe_evasion"
     )
     if env_name not in valid_envs:
         raise ValueError(f"Unknown environment: {env_name}")
@@ -142,8 +141,7 @@ def main():
     parser = argparse.ArgumentParser(description="Mock evaluation server")
     parser.add_argument("--env", type=str, required=True,
                        choices=["ssc_prefill", "ssc_user_persona", "ssc_act_tokens",
-                                "user_gender_prefill", "user_gender_user_persona", "user_gender_sae_desc",
-                                "probe_evasion"],
+                                "user_gender_prefill", "user_gender_user_persona", "user_gender_sae_desc"],
                        help="Environment to load on startup")
     parser.add_argument("--port", type=int, default=8000,
                        help="Port to run on (default: 8000)")
