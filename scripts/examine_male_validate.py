@@ -1,7 +1,7 @@
 from datasets import load_dataset
 
 # Load the male-validate dataset (train split)
-ds = load_dataset("oliverdk/male-validate", split="train")
+ds = load_dataset("bcywinski/male-validate", split="train")
 
 # Print dataset info
 print(f"Dataset size: {len(ds)}")

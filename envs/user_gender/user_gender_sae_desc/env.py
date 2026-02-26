@@ -32,7 +32,7 @@ class UserGenderSAEDescConfig:
     confidence_prompt_path: str = "envs/user_gender/user_gender_sae_desc/prompts/audit_confidence_prompt.txt"
     filter_features: bool = True  # Whether to filter features before auditing
     compute_confidence: bool = True
-    internalize_dataset_name: str = "oliverdk/male-validate"
+    internalize_dataset_name: str = "bcywinski/male-validate"
     sae_layer: int = 23
     sae_width_k: int = 131
     extract_top_k: int = 200

@@ -39,7 +39,7 @@ class UserGenderUserPersonaConfig:
     # Settings
     compute_confidence: bool = True
     compute_relevancy: bool = False  # Compute relevancy scores for model generations
-    internalize_dataset_name: str = "oliverdk/male-validate"
+    internalize_dataset_name: str = "bcywinski/male-validate"
 
     # Batch sizes
     generate_batch_size: int = 128

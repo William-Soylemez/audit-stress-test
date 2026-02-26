@@ -61,7 +61,7 @@ class UserGenderActivationOracleConfig:
     compute_relevancy: bool = True  # Compute relevancy scores for oracle generations
 
     # Internalization settings
-    internalize_dataset_name: str = "oliverdk/male-validate"
+    internalize_dataset_name: str = "bcywinski/male-validate"
     internalize_batch_size: int = 256
 
     # Evaluation settings
