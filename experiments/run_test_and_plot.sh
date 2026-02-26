@@ -10,7 +10,7 @@
 
 set -e
 
-INPUT_DIR="${1:-results_save}"
+INPUT_DIR="${1:-results_saved}"
 OUTPUT_DIR="results/rerun_test_results"
 
 echo "Input directory: $INPUT_DIR"
