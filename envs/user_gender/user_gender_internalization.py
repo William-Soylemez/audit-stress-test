@@ -8,7 +8,18 @@ from sampling.inference_engine import InferenceEngine
 
 
 def load_internalization_dataset(dataset_name: str, split: str = "train"):
-    internalize_ds = load_dataset(dataset_name, split=split)
+    ds = load_dataset(dataset_name)
+    available_splits = list(ds.keys())
+
+    if split in available_splits:
+        internalize_ds = ds[split]
+    elif split in ("train", "test") and available_splits == ["train"]:
+        # Dataset has no test split — create one via 80/20 split
+        split_ds = ds["train"].train_test_split(test_size=0.2, seed=42)
+        internalize_ds = split_ds[split]
+    else:
+        raise ValueError(f"Unknown split '{split}'. Available: {available_splits}")
+
     internalize_prompts = [ex["messages"][0]["content"] for ex in internalize_ds]
     internalize_responses = [ex["messages"][1]["content"] for ex in internalize_ds]
     return internalize_prompts, internalize_responses
