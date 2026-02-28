@@ -261,7 +261,7 @@ async def main():
     # Load all baselines from file
     with open(args.baselines_file) as f:
         baselines_data = json.load(f)
-    audit_threshold = baselines_data["audit_accuracy"]
+    audit_threshold = 1 - baselines_data["audit_accuracy"]
     confidence_threshold = baselines_data["audit_mean_confidence"]
     internalize_baseline = baselines_data["internalize_accuracy"]
 
