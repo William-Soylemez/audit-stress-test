@@ -231,6 +231,12 @@ def _evaluate(
         batch_size=env.cfg.sae_extract_batch_size,
     )
 
+    # Offload SAE model to CPU to free VRAM for auditing/internalization
+    import torch
+    env.sae_model.to("cpu")
+    env.sae.to("cpu")
+    torch.cuda.empty_cache()
+
     # Step 2: Audit SAE features (adapter OFF = base auditor model)
     env.model.disable_adapter_layers()
     auditing_results = audit(
@@ -272,6 +278,10 @@ def _evaluate(
             intern_results=internalization_results,
             internalize_responses=internalize_responses,
         )
+
+    # Reload SAE model back to GPU for next evaluation call
+    env.sae_model.to(env.cfg.device)
+    env.sae.to(env.cfg.device)
 
     results = {
         "system_prompt": system_prompt,
