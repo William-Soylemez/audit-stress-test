@@ -89,7 +89,15 @@ class UserGenderSAEDesc:
         self.train_split = split
 
     def _load_models(self):
-        """Load all models and tokenizers."""
+        """Load models with weight sharing to minimize VRAM.
+
+        - SAE model: HookedSAETransformer (separate, needed for transformer-lens hooks)
+        - Target/internalization model: base + LoRA adapter (PEFT, adapter enabled)
+        - Auditor/filter model: same base model (PEFT, adapter disabled)
+
+        The target and auditor share one set of base weights via PEFT adapter toggling.
+        """
+        from peft import PeftModel
         from sampling.sampling_utils import load_model_and_tokenizer
         from utils.utils import detect_model_type
 
@@ -102,7 +110,7 @@ class UserGenderSAEDesc:
             device=self.cfg.device
         )
 
-        # Load SAE model and SAE
+        # Load SAE model (HookedSAETransformer — separate, can't share with HF models)
         print(f"Loading SAE model: {self.cfg.adapter_model_path}")
         self.sae_model, self.sae_tokenizer, self.sae = load_model_and_sae(
             self.cfg.adapter_model_path,
@@ -113,20 +121,22 @@ class UserGenderSAEDesc:
             self.cfg.sae_width_k,
         )
 
-        # Load internalization model
-        print(f"Loading internalization model: {self.cfg.adapter_model_path}")
-        self.model, self.tokenizer = load_model_and_tokenizer(
-            self.cfg.adapter_model_path,
-            self.cfg.device
+        # Load base model once for internalization + auditing (shared via PEFT)
+        print(f"Loading base model: {self.cfg.base_model_path}")
+        base_model, self.tokenizer = load_model_and_tokenizer(
+            self.cfg.base_model_path,
+            self.cfg.device,
         )
 
-        # Load auditor model
-        print(f"Loading auditor model: {self.cfg.auditor_model_path}")
-        self.auditor_model, self.auditor_tokenizer = load_model_and_tokenizer(
-            self.cfg.auditor_model_path
-        )
+        # Wrap with LoRA adapter (toggle on for target/internalization, off for auditor)
+        print(f"Loading LoRA adapter: {self.cfg.adapter_model_path}")
+        self.model = PeftModel.from_pretrained(base_model, self.cfg.adapter_model_path)
+        self.model.eval()
 
-        # Load filter model if different
+        # Auditor and filter share the same base (adapter disabled during audit)
+        self.auditor_model = self.model
+        self.auditor_tokenizer = self.tokenizer
+
         if self.cfg.filter_model_path not in [None, self.cfg.auditor_model_path]:
             print(f"Loading filter model: {self.cfg.filter_model_path}")
             self.filter_model, self.filter_tokenizer = load_model_and_tokenizer(
@@ -137,7 +147,7 @@ class UserGenderSAEDesc:
             self.filter_tokenizer = self.auditor_tokenizer
 
         # Set model type
-        self.model_type = detect_model_type(self.cfg.adapter_model_path)
+        self.model_type = detect_model_type(self.cfg.base_model_path)
 
     def evaluate(
         self,
@@ -221,7 +231,8 @@ def _evaluate(
         batch_size=env.cfg.sae_extract_batch_size,
     )
 
-    # Step 2: Audit SAE features (with optional filter and confidence)
+    # Step 2: Audit SAE features (adapter OFF = base auditor model)
+    env.model.disable_adapter_layers()
     auditing_results = audit(
         feature_results=extract_results,
         user_prompts=user_prompts,
@@ -245,9 +256,10 @@ def _evaluate(
         confidence_batch_size=env.cfg.confidence_batch_size,
     )
 
-    # Step 3: Evaluate internalization (optional)
+    # Step 3: Evaluate internalization (optional, adapter ON = target model)
     internalization_results = None
     if run_internalization:
+        env.model.enable_adapter_layers()
         internalization_results = generate_intern(
             model=env.model,
             tokenizer=env.tokenizer,

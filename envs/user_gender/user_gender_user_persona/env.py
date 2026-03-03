@@ -116,25 +116,34 @@ class UserGenderUserPersona:
         self.train_split = split
 
     def _load_models(self):
-        """Load all models and tokenizers."""
+        """Load base model once, with switchable LoRA adapter.
+
+        Target model = base + LoRA adapter enabled
+        Auditor model = base with LoRA adapter disabled
+        Since they're used sequentially in _evaluate, we share weights.
+        """
+        from peft import PeftModel
         from sampling.sampling_utils import load_model_and_tokenizer
         from utils.utils import detect_model_type
 
-        # Load target model and tokenizer
-        print(f"Loading target model: {self.cfg.adapter_model_path}")
-        self.model, self.tokenizer = load_model_and_tokenizer(
-            self.cfg.adapter_model_path,
-            self.cfg.device
+        # Load base model once
+        print(f"Loading base model: {self.cfg.base_model_path}")
+        base_model, self.tokenizer = load_model_and_tokenizer(
+            self.cfg.base_model_path,
+            self.cfg.device,
         )
 
-        # Load auditor model and tokenizer
-        print(f"Loading auditor model: {self.cfg.auditor_model_path}")
-        self.auditor_model, self.auditor_tokenizer = load_model_and_tokenizer(
-            self.cfg.auditor_model_path
-        )
+        # Wrap with LoRA adapter
+        print(f"Loading LoRA adapter: {self.cfg.adapter_model_path}")
+        self.model = PeftModel.from_pretrained(base_model, self.cfg.adapter_model_path)
+        self.model.eval()
+
+        # Auditor shares the same base model/tokenizer (adapter toggled off during audit)
+        self.auditor_model = self.model
+        self.auditor_tokenizer = self.tokenizer
 
         # Set model type
-        self.model_type = detect_model_type(self.cfg.adapter_model_path)
+        self.model_type = detect_model_type(self.cfg.base_model_path)
 
     def evaluate(
         self,
@@ -241,7 +250,8 @@ def _evaluate(
     else:
         persona_user_list = [persona_user]
 
-    # Step 1: Generate responses with user persona
+    # Step 1: Generate responses with user persona (adapter ON = target model)
+    env.model.enable_adapter_layers()
     generation_results, relevancy_scores = generate(
         model=env.model,
         tokenizer=env.tokenizer,
@@ -256,7 +266,8 @@ def _evaluate(
         compute_relevancy=env.cfg.compute_relevancy,
     )
 
-    # Step 2: Audit responses (with optional confidence)
+    # Step 2: Audit responses (adapter OFF = base auditor model)
+    env.model.disable_adapter_layers()
     auditing_results = audit(
         generation_results=generation_results,
         auditor_model=env.auditor_model,
@@ -274,9 +285,10 @@ def _evaluate(
         for i, audit_result in enumerate(auditing_results):
             audit_result["relevancy"] = relevancy_scores[i] if i < len(relevancy_scores) else 0.5
 
-    # Step 3: Evaluate internalization (optional)
+    # Step 3: Evaluate internalization (optional, adapter ON = target model)
     internalization_results = None
     if run_internalization:
+        env.model.enable_adapter_layers()
         internalization_results = generate_intern(
             model=env.model,
             tokenizer=env.tokenizer,
