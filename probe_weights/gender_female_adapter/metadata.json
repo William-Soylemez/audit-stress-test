@@ -1,0 +1,13 @@
+{
+  "model": "bcywinski/gemma-2-9b-it-user-female",
+  "layers": [
+    30
+  ],
+  "pool": "mean_fact_exclude_last_k",
+  "use_chat_template": true,
+  "normalize": true,
+  "fit_method": "sklearn_lr",
+  "reg_coeff": 10.0,
+  "fit_intercept": false,
+  "exclude_last_k": 5
+}
