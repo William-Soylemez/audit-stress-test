@@ -13,6 +13,8 @@ METHOD_NAMES = {
     "user_gender_prefill": "Prefill",
     "user_gender_user_persona": "User Persona",
     "user_gender_sae_desc": "SAE Descriptions",
+    "user_gender_probe": "Linear Probe",
+    "user_gender_deception_probe": "Deception Probe",
     # User gender environments (Qwen)
     "user_gender_prefill_qwen": "Prefill",
     "user_gender_user_persona_qwen": "User Persona",
@@ -51,6 +53,17 @@ DEFAULT_DESCRIPTION_PATHS = {
         "method": "red_team_agent/method_descriptions/sae_desc_user_gender.md",
         "target_model": "red_team_agent/target_model_descriptions/user_gender.md",
         "goal": "red_team_agent/goal_descriptions/user_gender_sae_desc.md",
+    },
+    # User gender probe environments
+    "user_gender_probe": {
+        "method": "red_team_agent/method_descriptions/probe_user_gender.md",
+        "target_model": "red_team_agent/target_model_descriptions/user_gender.md",
+        "goal": "red_team_agent/goal_descriptions/user_gender_probe.md",
+    },
+    "user_gender_deception_probe": {
+        "method": "red_team_agent/method_descriptions/deception_probe_user_gender.md",
+        "target_model": "red_team_agent/target_model_descriptions/user_gender.md",
+        "goal": "red_team_agent/goal_descriptions/user_gender_deception_probe.md",
     },
     # User gender environments (Qwen) - same descriptions as Gemma
     "user_gender_prefill_qwen": {
