@@ -35,7 +35,7 @@ class UserGenderDeceptionProbeConfig:
     train_prompts_path_red: str = "envs/user_gender/data/gender_direct_train_red.txt"
     train_prompts_path_blue: str = "envs/user_gender/data/gender_direct_train_blue.txt"
     test_prompts_path: str = "envs/user_gender/data/gender_direct_test.txt"
-    internalize_dataset_name: str = "oliverdk/male-validate"
+    internalize_dataset_name: str = "bcywinski/male-validate"
     max_new_tokens: int = 256
     max_length: int = 512
     gen_batch_size: int = 4
@@ -49,7 +49,7 @@ class UserGenderDeceptionProbeConfigFemale(UserGenderDeceptionProbeConfig):
     target_gender: str = "female"
     adapter_model_path: str = "bcywinski/gemma-2-9b-it-user-female"
     probe_dir: str = "probe_weights/deception_female_adapter"
-    internalize_dataset_name: str = "oliverdk/female-validate"
+    internalize_dataset_name: str = "bcywinski/female-validate"
 
 
 class UserGenderDeceptionProbe:
