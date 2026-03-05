@@ -306,7 +306,7 @@ def score_with_probe(
         layer_scores = []
         for layer_idx, layer_num in enumerate(layer_list):
             d = directions[layer_num]
-            direction = d["direction_benign"]
+            direction = d["direction_harmful"]
             bias = d["bias"]
             h = hidden[:, layer_idx, :, :]
             kwargs = {"pool": pool, "mean": d.get("mean"), "std": d.get("std")}
