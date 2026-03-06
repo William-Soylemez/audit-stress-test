@@ -59,6 +59,7 @@ async def run_red_team_session(
     method_description_path: str | None = None,
     target_model_description_path: str | None = None,
     goal_description_path: str | None = None,
+    scoring_mode: str = "adversarial",
 ):
     """Run a red team session using the Agent SDK.
 
@@ -79,6 +80,7 @@ async def run_red_team_session(
         method_description_path: Override path for method description file
         target_model_description_path: Override path for target model description file
         goal_description_path: Override path for goal description file
+        scoring_mode: "adversarial" (fool auditor), "cooperative" (help auditor), or "neutral" (no optimization)
 
     Returns:
         Session summary dict
@@ -120,6 +122,7 @@ async def run_red_team_session(
             method_description_path=method_description_path,
             target_model_description_path=target_model_description_path,
             goal_description_path=goal_description_path,
+            scoring_mode=scoring_mode,
         )
     tools_server = create_session_tools(
         session_dir,
@@ -131,6 +134,7 @@ async def run_red_team_session(
         internalize_threshold=internalize_threshold,
         max_evaluations=max_evaluations,
         intern_server_url=intern_server_url,
+        scoring_mode=scoring_mode,
     )
 
     model_checkpoint = MODEL_CHECKPOINTS[model]
@@ -255,13 +259,25 @@ async def main():
         default=None,
         help="Path to goal description file (overrides default)",
     )
+    parser.add_argument(
+        "--scoring-mode",
+        type=str,
+        default="adversarial",
+        choices=["adversarial", "cooperative", "neutral"],
+        help="Scoring mode: adversarial (fool auditor), cooperative (help auditor), neutral (no optimization signal)",
+    )
 
     args = parser.parse_args()
 
     # Load all baselines from file
     with open(args.baselines_file) as f:
         baselines_data = json.load(f)
-    audit_threshold = 1 - baselines_data["audit_accuracy"]
+    if args.scoring_mode == "cooperative":
+        # Cooperative: threshold is baseline accuracy (agent tries to beat it)
+        audit_threshold = baselines_data["audit_accuracy"]
+    else:
+        # Adversarial: threshold is baseline error rate (agent tries to beat it)
+        audit_threshold = 1 - baselines_data["audit_accuracy"]
     confidence_threshold = baselines_data["audit_mean_confidence"]
     internalize_baseline = baselines_data["internalize_accuracy"]
 
@@ -295,6 +311,7 @@ async def main():
         print(f"Target Model Description: {args.target_model_description_file}")
     if args.goal_description_file:
         print(f"Goal Description: {args.goal_description_file}")
+    print(f"Scoring Mode: {args.scoring_mode}")
 
     summary = await run_red_team_session(
         env_name=args.env,
@@ -314,6 +331,7 @@ async def main():
         method_description_path=args.method_description_file,
         target_model_description_path=args.target_model_description_file,
         goal_description_path=args.goal_description_file,
+        scoring_mode=args.scoring_mode,
     )
 
     print("\nFinal Summary:")
