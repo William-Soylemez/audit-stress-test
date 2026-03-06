@@ -167,7 +167,7 @@ async def main():
             "ssc_prefill", "ssc_user_persona", "ssc_act_tokens",
             "user_gender_prefill", "user_gender_prefill_qwen",
             "user_gender_user_persona", "user_gender_user_persona_qwen",
-            "user_gender_sae_desc",
+            "user_gender_sae_desc", "user_gender_probe", "user_gender_deception_probe",
         ],
         help="Target environment",
     )
