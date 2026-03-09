@@ -192,7 +192,8 @@ def main():
                        choices=["ssc_prefill", "ssc_user_persona", "ssc_act_tokens",
                                 "ssc_sae_desc", "ssc_activation_oracle",
                                 "user_gender_prefill", "user_gender_user_persona",
-                                "user_gender_sae_desc", "user_gender_activation_oracle"],
+                                "user_gender_sae_desc", "user_gender_activation_oracle"
+                                "user_gender_probe"],
                        help="Environment to load on startup")
     parser.add_argument("--port", type=int, default=8000,
                        help="Port to run on (default: 8000)")
