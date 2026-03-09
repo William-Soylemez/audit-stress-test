@@ -74,6 +74,9 @@ def get_env(env_name: str):
     elif env_name == "user_gender_user_persona":
         from envs.user_gender.user_gender_user_persona.env import UserGenderUserPersona, UserGenderUserPersonaConfig
         env = UserGenderUserPersona(UserGenderUserPersonaConfig())
+    elif env_name == "user_gender_probe":
+        from envs.user_gender.user_gender_probe.env import UserGenderProbe, UserGenderProbeConfig
+        env = UserGenderProbe(UserGenderProbeConfig())
     elif env_name == "user_gender_sae_desc":
         from envs.user_gender.user_gender_sae_desc.env import UserGenderSAEDesc, UserGenderSAEDescConfig
         env = UserGenderSAEDesc(UserGenderSAEDescConfig())
