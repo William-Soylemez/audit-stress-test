@@ -30,10 +30,11 @@ class UserGenderProbeConfig:
     target_gender: str = "male"
     base_model_path: str = "google/gemma-2-9b-it"
     adapter_model_path: str = "bcywinski/gemma-2-9b-it-user-male"
-    probe_dir: str = "probe_weights/gender_male_adapter"
-    train_prompts_path_red: str = "envs/user_gender/user_gender_probe/prompts/fact_prompts_train_red.txt"
-    train_prompts_path_blue: str = "envs/user_gender/user_gender_probe/prompts/fact_prompts_train_blue.txt"
-    test_prompts_path: str = "envs/user_gender/user_gender_probe/prompts/fact_prompts_test.txt"
+    probe_dir: str = "probe_weights/gender_male_conversational"
+    probe_layer: int = 26
+    train_prompts_path_red: str = "envs/user_gender/data/gender_direct_train_red.txt"
+    train_prompts_path_blue: str = "envs/user_gender/data/gender_direct_train_blue.txt"
+    test_prompts_path: str = "envs/user_gender/data/gender_direct_test.txt"
     internalize_dataset_name: str = "bcywinski/male-validate"
     max_new_tokens: int = 256
     max_length: int = 512
@@ -112,9 +113,10 @@ class UserGenderProbe:
 
     def _load_probe(self):
         print(f"Loading probe from: {self.cfg.probe_dir}")
-        self.probe_directions, self.probe_metadata = load_probe(self.cfg.probe_dir)
-        print(f"  Layers: {self.probe_metadata['layers']}, "
-              f"Pool: {self.probe_metadata.get('pool', 'last')}")
+        self.probe_weight, self.probe_bias, self.probe_layer = load_probe(
+            self.cfg.probe_dir, layer=self.cfg.probe_layer,
+        )
+        print(f"  Layer: {self.probe_layer}, Weight: {list(self.probe_weight.shape)}, Bias: {list(self.probe_bias.shape)}")
 
     def evaluate(
         self,
@@ -180,8 +182,9 @@ def _evaluate(
         model=env.model,
         tokenizer=env.tokenizer,
         pairs=pairs,
-        directions=env.probe_directions,
-        metadata=env.probe_metadata,
+        weight=env.probe_weight,
+        bias=env.probe_bias,
+        layer=env.probe_layer,
         batch_size=env.cfg.score_batch_size,
         max_length=env.cfg.max_length,
         device=device,
