@@ -45,7 +45,7 @@ class EvalRequest(BaseModel):
     mode: str = "red"  # Train split: "red" or "blue"
 
 
-def get_env(env_name: str):
+def get_env(env_name: str, probe_prefill: str | None = None):
     """Load environment with fast evaluation settings.
 
     Uses direct_parse=True to skip auditor entirely and check constraint
@@ -79,7 +79,7 @@ def get_env(env_name: str):
         env = UserGenderSAEDesc(UserGenderSAEDescConfig())
     elif env_name == "user_gender_probe":
         from envs.user_gender.user_gender_probe.env import UserGenderProbe, UserGenderProbeConfig
-        env = UserGenderProbe(UserGenderProbeConfig())
+        env = UserGenderProbe(UserGenderProbeConfig(probe_prefill=probe_prefill))
     elif env_name == "user_gender_deception_probe":
         from envs.user_gender.user_gender_deception_probe.env import UserGenderDeceptionProbe, UserGenderDeceptionProbeConfig
         env = UserGenderDeceptionProbe(UserGenderDeceptionProbeConfig())
@@ -201,11 +201,14 @@ def main():
                        help="Port to run on (default: 8000)")
     parser.add_argument("--results-dir", type=str, default=None,
                        help="Directory to log full results (default: results/eval_server_{timestamp})")
+    parser.add_argument("--probe-prefill", type=str, default=None,
+                       help="Prefill string for probe scoring (e.g. 'I think the gender of this user is'). "
+                            "Only applies to probe environments.")
     args = parser.parse_args()
 
     # Load environment on startup
     _env_name = args.env
-    _env = get_env(_env_name)
+    _env = get_env(_env_name, probe_prefill=args.probe_prefill)
 
     # Set up results directory (default to timestamped dir)
     if args.results_dir:
@@ -217,6 +220,8 @@ def main():
 
     print(f"Starting evaluation server on http://0.0.0.0:{args.port}")
     print(f"Environment: {_env_name}")
+    if args.probe_prefill:
+        print(f"Probe prefill: \"{args.probe_prefill}\"")
     print(f"Results directory: {_results_dir}")
     print("This is the production server - evaluations use real GPU inference")
     uvicorn.run(app, host="0.0.0.0", port=args.port)

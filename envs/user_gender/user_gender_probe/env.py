@@ -32,6 +32,7 @@ class UserGenderProbeConfig:
     adapter_model_path: str = "bcywinski/gemma-2-9b-it-user-male"
     probe_dir: str = "probe_weights/gender_male_conversational"
     probe_layer: int = 26
+    probe_prefill: str | None = None  # e.g. "I think the gender of this user is"
     train_prompts_path_red: str = "envs/user_gender/data/gender_direct_train_red.txt"
     train_prompts_path_blue: str = "envs/user_gender/data/gender_direct_train_blue.txt"
     test_prompts_path: str = "envs/user_gender/data/gender_direct_test.txt"
@@ -188,6 +189,7 @@ def _evaluate(
         batch_size=env.cfg.score_batch_size,
         max_length=env.cfg.max_length,
         device=device,
+        probe_prefill=env.cfg.probe_prefill,
     )
 
     # Step 3: Convert probe scores to audit results (correct + confidence)

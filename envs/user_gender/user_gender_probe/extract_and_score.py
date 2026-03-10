@@ -175,11 +175,17 @@ def score_with_probe(
     batch_size: int = 4,
     max_length: int = 512,
     device: str = "cuda",
+    probe_prefill: str | None = None,
 ) -> list[dict]:
     """Score (prompt, completion) pairs using the 2-class linear probe.
 
     Probe: sigmoid(activation @ weight.T + bias)
     Output index 0 = male, index 1 = female.
+
+    If probe_prefill is set, ignores the generated completion and instead
+    constructs texts as: chat_template(user_prompt) + prefill_string,
+    probing at the last token of the prefill. This forces the model to
+    activate gender-relevant representations before the probe reads.
 
     Returns list of dicts with male_prob and female_prob for each example.
     """
@@ -192,7 +198,10 @@ def score_with_probe(
         for prompt_text, completion_text in batch_pairs:
             msgs = [{"role": "user", "content": prompt_text}]
             prefix = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
-            batch_texts.append(prefix + completion_text)
+            if probe_prefill is not None:
+                batch_texts.append(prefix + probe_prefill)
+            else:
+                batch_texts.append(prefix + completion_text)
 
         # (batch, hidden_size) — last token activations at target layer
         h = get_last_token_hidden_states(
