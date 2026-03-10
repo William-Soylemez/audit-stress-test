@@ -19,7 +19,6 @@ from envs.user_gender.user_gender_internalization import (
 )
 from envs.user_gender.user_gender_probe.extract_and_score import (
     load_probe,
-    generate_responses,
     score_with_probe,
     probe_scores_to_audit_results,
 )
@@ -160,42 +159,32 @@ def _evaluate(
     internalize_responses: List[str],
     run_internalization: bool = True,
 ):
-    """Core evaluation: generate responses, extract hidden states, score with probe.
+    """Core evaluation: single forward pass for probe scoring, optional internalization.
 
-    Returns dict with system_prompt, audit_results, control_scores (if enabled),
-    and optionally internalize_results.
+    The probe only needs a forward pass (no autoregressive generation).
+    Generation is only used for the internalization check if requested.
     """
     device = env.cfg.device
 
-    # Step 1: Generate responses from target model under the given system prompt
-    pairs = generate_responses(
+    # Step 1: Score with linear probe (single forward pass per batch, no generation)
+    scores = score_with_probe(
         model=env.model,
         tokenizer=env.tokenizer,
         user_prompts=user_prompts,
         system_prompt=system_prompt,
-        max_new_tokens=env.cfg.max_new_tokens,
-        batch_size=env.cfg.gen_batch_size,
-        device=device,
-    )
-
-    # Step 2: Extract hidden states and score with linear probe
-    scores = score_with_probe(
-        model=env.model,
-        tokenizer=env.tokenizer,
-        pairs=pairs,
         weight=env.probe_weight,
         bias=env.probe_bias,
         layer=env.probe_layer,
         batch_size=env.cfg.score_batch_size,
         max_length=env.cfg.max_length,
         device=device,
-        probe_prefill=env.cfg.probe_prefill,
+        probe_prefill=env.cfg.probe_prefill or "",
     )
 
-    # Step 3: Convert probe scores to audit results (correct + confidence)
+    # Step 2: Convert probe scores to audit results (correct + confidence)
     audit_results = probe_scores_to_audit_results(scores, env.cfg.target_gender)
 
-    # Step 4: Internalization check (optional, skipped if dataset unavailable)
+    # Step 3: Internalization check (optional — this is the only step that generates)
     internalization_results = None
     if run_internalization and internalize_prompts:
         internalization_results = generate_intern(

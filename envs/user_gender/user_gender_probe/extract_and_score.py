@@ -105,103 +105,51 @@ def load_probe(probe_dir: str | Path, layer: int = 26) -> Tuple[torch.Tensor, to
 
 
 # ---------------------------------------------------------------------------
-# High-level: generate responses then score with probe
+# High-level: single forward pass probe scoring (no generation needed)
 # ---------------------------------------------------------------------------
-
-def generate_responses(
-    model,
-    tokenizer,
-    user_prompts: list[str],
-    system_prompt: str | None,
-    max_new_tokens: int = 256,
-    batch_size: int = 4,
-    device: str = "cuda",
-) -> list[tuple[str, str]]:
-    """Generate model responses for a list of user prompts.
-
-    Returns list of (formatted_prompt_text, completion_text) pairs.
-    """
-    tokenizer.padding_side = "left"
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-
-    pairs: list[tuple[str, str]] = []
-
-    for i in tqdm(range(0, len(user_prompts), batch_size), desc="Generating responses"):
-        batch_prompts = user_prompts[i : i + batch_size]
-
-        batch_texts = []
-        for up in batch_prompts:
-            messages = []
-            if system_prompt:
-                messages.append({"role": "user", "content": system_prompt + "\n\n" + up})
-            else:
-                messages.append({"role": "user", "content": up})
-            text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-            batch_texts.append(text)
-
-        encoded = tokenizer(
-            batch_texts, return_tensors="pt", padding=True, truncation=True,
-            max_length=2048 - max_new_tokens,
-        )
-        input_ids = encoded["input_ids"].to(device)
-        attention_mask = encoded["attention_mask"].to(device)
-
-        with torch.no_grad():
-            out = model.generate(
-                input_ids,
-                attention_mask=attention_mask,
-                max_new_tokens=max_new_tokens,
-                do_sample=False,
-                pad_token_id=tokenizer.eos_token_id,
-            )
-
-        for j, up in enumerate(batch_prompts):
-            gen_ids = out[j][input_ids.shape[1]:]
-            completion = tokenizer.decode(gen_ids, skip_special_tokens=True)
-            prompt_text = up if not system_prompt else system_prompt + "\n\n" + up
-            pairs.append((prompt_text, completion))
-
-    return pairs
-
 
 def score_with_probe(
     model,
     tokenizer,
-    pairs: list[tuple[str, str]],
+    user_prompts: list[str],
+    system_prompt: str | None,
     weight: torch.Tensor,
     bias: torch.Tensor,
     layer: int,
     batch_size: int = 4,
     max_length: int = 512,
     device: str = "cuda",
-    probe_prefill: str | None = None,
+    probe_prefill: str = "",
 ) -> list[dict]:
-    """Score (prompt, completion) pairs using the 2-class linear probe.
+    """Score user prompts with the 2-class linear probe in a single forward pass.
+
+    For each prompt, constructs: chat_template(system_prompt + user_prompt) + probe_prefill
+    then runs one forward pass to extract hidden states at the last token position.
 
     Probe: sigmoid(activation @ weight.T + bias)
     Output index 0 = male, index 1 = female.
 
-    If probe_prefill is set, ignores the generated completion and instead
-    constructs texts as: chat_template(user_prompt) + prefill_string,
-    probing at the last token of the prefill. This forces the model to
-    activate gender-relevant representations before the probe reads.
+    No autoregressive generation is performed — just a single forward pass per batch.
 
     Returns list of dicts with male_prob and female_prob for each example.
     """
+    tokenizer.padding_side = "left"
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
     all_results: list[dict] = []
 
-    for i in tqdm(range(0, len(pairs), batch_size), desc="Scoring with probe"):
-        batch_pairs = pairs[i : i + batch_size]
+    for i in tqdm(range(0, len(user_prompts), batch_size), desc="Scoring with probe"):
+        batch_prompts = user_prompts[i : i + batch_size]
 
         batch_texts = []
-        for prompt_text, completion_text in batch_pairs:
-            msgs = [{"role": "user", "content": prompt_text}]
-            prefix = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
-            if probe_prefill is not None:
-                batch_texts.append(prefix + probe_prefill)
+        for up in batch_prompts:
+            if system_prompt:
+                msgs = [{"role": "user", "content": system_prompt + "\n\n" + up}]
             else:
-                batch_texts.append(prefix + completion_text)
+                msgs = [{"role": "user", "content": up}]
+            prefix = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+            batch_texts.append(prefix + probe_prefill)
 
         # (batch, hidden_size) — last token activations at target layer
         h = get_last_token_hidden_states(
