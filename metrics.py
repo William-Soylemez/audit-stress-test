@@ -37,4 +37,9 @@ def compute_metrics(result: dict, round_digits: int | None = None) -> dict:
     if round_digits is not None:
         metrics = {k: round(v, round_digits) for k, v in metrics.items()}
 
+    # Pass through verification outputs if present (raw text, no aggregation)
+    verification_outputs = result.get("verification_outputs")
+    if verification_outputs is not None:
+        metrics["verification_outputs"] = verification_outputs
+
     return metrics

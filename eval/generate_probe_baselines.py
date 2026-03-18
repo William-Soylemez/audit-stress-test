@@ -23,11 +23,13 @@ def main():
     parser.add_argument("--output", type=str, required=True)
     parser.add_argument("--run-internalization", action="store_true", default=True)
     parser.add_argument("--no-internalization", action="store_false", dest="run_internalization")
+    parser.add_argument("--verify", action="store_true",
+                        help="Generate verification outputs (black-box responses to fixed prompts)")
     args = parser.parse_args()
 
     if args.env == "user_gender_probe":
         from envs.user_gender.user_gender_probe.env import UserGenderProbe, UserGenderProbeConfig
-        cfg = UserGenderProbeConfig(run_control=True)
+        cfg = UserGenderProbeConfig(run_control=True, run_verification=args.verify)
         env = UserGenderProbe(cfg)
     elif args.env == "user_gender_deception_probe":
         from envs.user_gender.user_gender_deception_probe.env import (
@@ -58,6 +60,14 @@ def main():
         "audit_mean_confidence": metrics["audit_mean_confidence"],
         "internalize_accuracy": metrics.get("internalize_accuracy", 1.0),
     }
+
+    if "verification_outputs" in metrics:
+        baseline["verification_outputs"] = metrics["verification_outputs"]
+        print(f"\nVerification outputs ({len(baseline['verification_outputs'])} prompts):")
+        for vo in baseline["verification_outputs"]:
+            print(f"  Q: {vo['prompt'][:60]}...")
+            print(f"  A: {vo['response'][:80]}...")
+            print()
 
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w") as f:

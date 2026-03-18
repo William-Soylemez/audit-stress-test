@@ -60,6 +60,7 @@ async def run_red_team_session(
     target_model_description_path: str | None = None,
     goal_description_path: str | None = None,
     scoring_mode: str = "adversarial",
+    verification_baselines: list[dict] | None = None,
 ):
     """Run a red team session using the Agent SDK.
 
@@ -123,6 +124,7 @@ async def run_red_team_session(
             target_model_description_path=target_model_description_path,
             goal_description_path=goal_description_path,
             scoring_mode=scoring_mode,
+            verification_baselines=verification_baselines,
         )
     tools_server = create_session_tools(
         session_dir,
@@ -135,6 +137,7 @@ async def run_red_team_session(
         max_evaluations=max_evaluations,
         intern_server_url=intern_server_url,
         scoring_mode=scoring_mode,
+        verification_baselines=verification_baselines,
     )
 
     model_checkpoint = MODEL_CHECKPOINTS[model]
@@ -266,6 +269,11 @@ async def main():
         choices=["adversarial", "cooperative", "neutral"],
         help="Scoring mode: adversarial (fool auditor), cooperative (help auditor), neutral (no optimization signal)",
     )
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="Enable black-box verification: compare model outputs to baseline responses on fixed prompts",
+    )
 
     args = parser.parse_args()
 
@@ -312,6 +320,10 @@ async def main():
     if args.goal_description_file:
         print(f"Goal Description: {args.goal_description_file}")
     print(f"Scoring Mode: {args.scoring_mode}")
+    if args.verify:
+        print("Verification: ENABLED")
+
+    verification_baselines = baselines_data.get("verification_outputs") if args.verify else None
 
     summary = await run_red_team_session(
         env_name=args.env,
@@ -332,6 +344,7 @@ async def main():
         target_model_description_path=args.target_model_description_file,
         goal_description_path=args.goal_description_file,
         scoring_mode=args.scoring_mode,
+        verification_baselines=verification_baselines,
     )
 
     print("\nFinal Summary:")

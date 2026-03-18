@@ -172,6 +172,46 @@ def score_with_probe(
     return all_results
 
 
+def generate_verification_responses(
+    model,
+    tokenizer,
+    prompts: list[str],
+    system_prompt: str | None,
+    max_new_tokens: int = 256,
+    device: str = "cuda",
+) -> list[dict]:
+    """Generate text responses to verification prompts via autoregressive decoding.
+
+    Returns list of {"prompt": str, "response": str} dicts.
+    """
+    tokenizer.padding_side = "left"
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    results = []
+    for prompt_text in prompts:
+        if system_prompt:
+            msgs = [{"role": "user", "content": system_prompt + "\n\n" + prompt_text}]
+        else:
+            msgs = [{"role": "user", "content": prompt_text}]
+        formatted = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+        inputs = tokenizer(formatted, return_tensors="pt", truncation=True, max_length=512).to(device)
+
+        import torch
+        with torch.no_grad():
+            output_ids = model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+            )
+        # Decode only newly generated tokens
+        generated_ids = output_ids[0, inputs["input_ids"].shape[1]:]
+        response_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
+        results.append({"prompt": prompt_text, "response": response_text})
+
+    return results
+
+
 def probe_scores_to_audit_results(
     scores: list[dict],
     target_gender: str,

@@ -23,6 +23,7 @@ def create_session_tools(
     max_evaluations: int = None,
     intern_server_url: str = None,  # If set, use dual-server mode
     scoring_mode: str = "adversarial",
+    verification_baselines: list[dict] | None = None,
 ):
     """Create tools bound to a specific session.
 
@@ -124,6 +125,7 @@ def create_session_tools(
         audit_accuracy = result["audit_accuracy"]
         audit_mean_confidence = result["audit_mean_confidence"]
         internalize_accuracy = result.get("internalize_accuracy")
+        verification_outputs = result.get("verification_outputs")
 
         score = compute_score(audit_accuracy, audit_mean_confidence, internalize_accuracy, audit_only, internalize_threshold, scoring_mode)
         success = is_success(audit_accuracy, internalize_accuracy, audit_threshold, internalize_threshold, audit_only, scoring_mode)
@@ -139,6 +141,8 @@ def create_session_tools(
             "score": round(score, 4),
             "is_success": success,
         }
+        if verification_outputs is not None:
+            metrics_entry["verification_outputs"] = verification_outputs
         eval_entries = load_json_log(evaluation_log_path)
         eval_entries.append(metrics_entry)
         save_json_log(evaluation_log_path, eval_entries)
@@ -193,6 +197,16 @@ Metrics{mode_label}:
 {chr(10).join(metrics_lines)}
 
 evaluation_id: {evaluation_id}"""
+
+        # Append verification comparison if available
+        if verification_outputs and verification_baselines:
+            verification_lines = ["\n\nVerification Outputs (compare with baseline):"]
+            for i, vo in enumerate(verification_outputs):
+                baseline_response = verification_baselines[i]["response"] if i < len(verification_baselines) else "N/A"
+                verification_lines.append(f"\n  Prompt: \"{vo['prompt']}\"")
+                verification_lines.append(f"  Baseline: \"{baseline_response[:150]}\"")
+                verification_lines.append(f"  Current:  \"{vo['response'][:150]}\"")
+            response_text += "\n".join(verification_lines)
 
         return {"content": [{"type": "text", "text": response_text}]}
 

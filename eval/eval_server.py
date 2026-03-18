@@ -45,7 +45,7 @@ class EvalRequest(BaseModel):
     mode: str = "red"  # Train split: "red" or "blue"
 
 
-def get_env(env_name: str, probe_prefill: str | None = None):
+def get_env(env_name: str, probe_prefill: str | None = None, run_verification: bool = False):
     """Load environment with fast evaluation settings.
 
     Uses direct_parse=True to skip auditor entirely and check constraint
@@ -79,7 +79,7 @@ def get_env(env_name: str, probe_prefill: str | None = None):
         env = UserGenderSAEDesc(UserGenderSAEDescConfig())
     elif env_name == "user_gender_probe":
         from envs.user_gender.user_gender_probe.env import UserGenderProbe, UserGenderProbeConfig
-        env = UserGenderProbe(UserGenderProbeConfig(probe_prefill=probe_prefill))
+        env = UserGenderProbe(UserGenderProbeConfig(probe_prefill=probe_prefill, run_verification=run_verification))
     elif env_name == "user_gender_deception_probe":
         from envs.user_gender.user_gender_deception_probe.env import UserGenderDeceptionProbe, UserGenderDeceptionProbeConfig
         env = UserGenderDeceptionProbe(UserGenderDeceptionProbeConfig())
@@ -122,11 +122,12 @@ def run_evaluation_sync(prompt: str, run_internalization: bool = True, env_kwarg
             f.write(json.dumps(full_result_entry, indent=2) + "\n")
 
     # Return only raw metrics over the API (score/is_success computed client-side)
-    return {
+    response = {
         "prompt": prompt,
         "evaluation_id": evaluation_id,
         **metrics,
     }
+    return response
 
 
 @app.post("/evaluate")
@@ -204,11 +205,13 @@ def main():
     parser.add_argument("--probe-prefill", type=str, default=None,
                        help="Prefill string for probe scoring (e.g. 'I think the gender of this user is'). "
                             "Only applies to probe environments.")
+    parser.add_argument("--verify", action="store_true",
+                       help="Enable black-box verification: generate responses to fixed prompts each evaluation")
     args = parser.parse_args()
 
     # Load environment on startup
     _env_name = args.env
-    _env = get_env(_env_name, probe_prefill=args.probe_prefill)
+    _env = get_env(_env_name, probe_prefill=args.probe_prefill, run_verification=args.verify)
 
     # Set up results directory (default to timestamped dir)
     if args.results_dir:
