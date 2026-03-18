@@ -141,26 +141,32 @@ def score_with_probe(
 
     all_results: list[dict] = []
 
-    # Step 1: Generate full responses for all prompts
-    full_texts = []
-    for up in tqdm(user_prompts, desc="Generating responses"):
+    # Step 1: Generate full responses for all prompts (batched)
+    all_prompt_texts = []
+    for up in user_prompts:
         if system_prompt:
             msgs = [{"role": "user", "content": system_prompt + "\n\n" + up}]
         else:
             msgs = [{"role": "user", "content": up}]
         prefix = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
-        prompt_text = prefix + probe_prefill
+        all_prompt_texts.append(prefix + probe_prefill)
 
-        inputs = tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=max_length).to(device)
+    full_texts = []
+    for i in tqdm(range(0, len(all_prompt_texts), batch_size), desc="Generating responses"):
+        batch_prompt_texts = all_prompt_texts[i : i + batch_size]
+        inputs = tokenizer(
+            batch_prompt_texts, return_tensors="pt", padding=True,
+            truncation=True, max_length=max_length,
+        ).to(device)
         with torch.no_grad():
             output_ids = model.generate(
                 **inputs,
                 max_new_tokens=max_new_tokens,
                 do_sample=False,
             )
-        # Decode the full sequence (prompt + generated response) as the text to probe
-        full_text = tokenizer.decode(output_ids[0], skip_special_tokens=False)
-        full_texts.append(full_text)
+        for j in range(output_ids.size(0)):
+            full_text = tokenizer.decode(output_ids[j], skip_special_tokens=False)
+            full_texts.append(full_text)
 
     # Step 2: Probe on the last token of each full text in batches
     for i in tqdm(range(0, len(full_texts), batch_size), desc="Probing last token"):
