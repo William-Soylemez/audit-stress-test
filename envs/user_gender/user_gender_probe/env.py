@@ -19,6 +19,7 @@ from envs.user_gender.user_gender_internalization import (
 )
 from envs.user_gender.user_gender_probe.extract_and_score import (
     load_probe,
+    generate_responses,
     score_with_probe,
     probe_scores_to_audit_results,
     generate_verification_responses,
@@ -169,29 +170,38 @@ def _evaluate(
     internalize_responses: List[str],
     run_internalization: bool = True,
 ):
-    """Core evaluation: generate responses then probe last token, optional internalization."""
+    """Core evaluation: generate responses, then probe last token, optional internalization."""
     device = env.cfg.device
 
-    # Step 1: Generate response for each prompt, then probe last token
-    scores = score_with_probe(
+    # Step 1: Generate responses for all prompts
+    pairs = generate_responses(
         model=env.model,
         tokenizer=env.tokenizer,
         user_prompts=user_prompts,
         system_prompt=system_prompt,
+        max_new_tokens=env.cfg.max_new_tokens,
+        batch_size=env.cfg.gen_batch_size,
+        device=device,
+    )
+
+    # Step 2: Score with linear probe on last token of prompt+response
+    scores = score_with_probe(
+        model=env.model,
+        tokenizer=env.tokenizer,
+        pairs=pairs,
         weight=env.probe_weight,
         bias=env.probe_bias,
         layer=env.probe_layer,
         batch_size=env.cfg.score_batch_size,
         max_length=env.cfg.max_length,
-        max_new_tokens=env.cfg.max_new_tokens,
         device=device,
-        probe_prefill=env.cfg.probe_prefill or "",
+        probe_prefill=env.cfg.probe_prefill or None,
     )
 
-    # Step 2: Convert probe scores to audit results (correct + confidence)
+    # Step 3: Convert probe scores to audit results (correct + confidence)
     audit_results = probe_scores_to_audit_results(scores, env.cfg.target_gender)
 
-    # Step 3: Internalization check (optional — this is the only step that generates)
+    # Step 4: Internalization check (optional)
     internalization_results = None
     if run_internalization and internalize_prompts:
         internalization_results = generate_intern(
@@ -214,7 +224,7 @@ def _evaluate(
     if internalization_results is not None:
         results["internalize_results"] = internalization_results
 
-    # Step 4: Verification outputs (autoregressive generation on fixed prompts)
+    # Step 5: Verification outputs (autoregressive generation on fixed prompts)
     if env.cfg.run_verification:
         results["verification_outputs"] = generate_verification_responses(
             model=env.model,

@@ -105,72 +105,103 @@ def load_probe(probe_dir: str | Path, layer: int = 26) -> Tuple[torch.Tensor, to
 
 
 # ---------------------------------------------------------------------------
-# High-level: generate response then probe on last token
+# High-level: generate responses then score with probe
 # ---------------------------------------------------------------------------
 
-def score_with_probe(
+def generate_responses(
     model,
     tokenizer,
     user_prompts: list[str],
     system_prompt: str | None,
-    weight: torch.Tensor,
-    bias: torch.Tensor,
-    layer: int,
-    batch_size: int = 4,
-    max_length: int = 512,
     max_new_tokens: int = 256,
+    batch_size: int = 4,
     device: str = "cuda",
-    probe_prefill: str = "",
-) -> list[dict]:
-    """Generate a full response for each prompt, then probe on the last token.
+) -> list[tuple[str, str]]:
+    """Generate model responses for a list of user prompts.
 
-    For each prompt:
-      1. Construct chat_template(system_prompt + user_prompt)
-      2. Generate a full autoregressive response
-      3. Run a forward pass on the complete text (prompt + response)
-      4. Probe hidden states at the last token of the response
-
-    Probe: sigmoid(activation @ weight.T + bias)
-    Output index 0 = male, index 1 = female.
-
-    Returns list of dicts with male_prob and female_prob for each example.
+    Returns list of (formatted_prompt_text, completion_text) pairs.
     """
     tokenizer.padding_side = "left"
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    all_results: list[dict] = []
+    pairs: list[tuple[str, str]] = []
 
-    # Step 1: Generate full responses for all prompts (batched)
-    all_prompt_texts = []
-    for up in user_prompts:
-        if system_prompt:
-            msgs = [{"role": "user", "content": system_prompt + "\n\n" + up}]
-        else:
-            msgs = [{"role": "user", "content": up}]
-        prefix = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
-        all_prompt_texts.append(prefix + probe_prefill)
+    for i in tqdm(range(0, len(user_prompts), batch_size), desc="Generating responses"):
+        batch_prompts = user_prompts[i : i + batch_size]
 
-    full_texts = []
-    for i in tqdm(range(0, len(all_prompt_texts), batch_size), desc="Generating responses"):
-        batch_prompt_texts = all_prompt_texts[i : i + batch_size]
-        inputs = tokenizer(
-            batch_prompt_texts, return_tensors="pt", padding=True,
-            truncation=True, max_length=max_length,
-        ).to(device)
+        batch_texts = []
+        for up in batch_prompts:
+            messages = []
+            if system_prompt:
+                messages.append({"role": "user", "content": system_prompt + "\n\n" + up})
+            else:
+                messages.append({"role": "user", "content": up})
+            text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+            batch_texts.append(text)
+
+        encoded = tokenizer(
+            batch_texts, return_tensors="pt", padding=True, truncation=True,
+            max_length=2048 - max_new_tokens,
+        )
+        input_ids = encoded["input_ids"].to(device)
+        attention_mask = encoded["attention_mask"].to(device)
+
         with torch.no_grad():
-            output_ids = model.generate(
-                **inputs,
+            out = model.generate(
+                input_ids,
+                attention_mask=attention_mask,
                 max_new_tokens=max_new_tokens,
                 do_sample=False,
+                pad_token_id=tokenizer.eos_token_id,
             )
-        for j in range(output_ids.size(0)):
-            full_text = tokenizer.decode(output_ids[j], skip_special_tokens=False)
-            full_texts.append(full_text)
 
-    # Step 2: Probe on the last token of each full text in batches
-    for i in tqdm(range(0, len(full_texts), batch_size), desc="Probing last token"):
-        batch_texts = full_texts[i : i + batch_size]
+        for j, up in enumerate(batch_prompts):
+            gen_ids = out[j][input_ids.shape[1]:]
+            completion = tokenizer.decode(gen_ids, skip_special_tokens=True)
+            prompt_text = up if not system_prompt else system_prompt + "\n\n" + up
+            pairs.append((prompt_text, completion))
+
+    return pairs
+
+
+def score_with_probe(
+    model,
+    tokenizer,
+    pairs: list[tuple[str, str]],
+    weight: torch.Tensor,
+    bias: torch.Tensor,
+    layer: int,
+    batch_size: int = 4,
+    max_length: int = 512,
+    device: str = "cuda",
+    probe_prefill: str | None = None,
+) -> list[dict]:
+    """Score (prompt, completion) pairs using the 2-class linear probe.
+
+    Probe: sigmoid(activation @ weight.T + bias)
+    Output index 0 = male, index 1 = female.
+
+    If probe_prefill is set, ignores the generated completion and instead
+    constructs texts as: chat_template(user_prompt) + prefill_string,
+    probing at the last token of the prefill. This forces the model to
+    activate gender-relevant representations before the probe reads.
+
+    Returns list of dicts with male_prob and female_prob for each example.
+    """
+    all_results: list[dict] = []
+
+    for i in tqdm(range(0, len(pairs), batch_size), desc="Scoring with probe"):
+        batch_pairs = pairs[i : i + batch_size]
+
+        batch_texts = []
+        for prompt_text, completion_text in batch_pairs:
+            msgs = [{"role": "user", "content": prompt_text}]
+            prefix = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+            if probe_prefill is not None:
+                batch_texts.append(prefix + probe_prefill)
+            else:
+                batch_texts.append(prefix + completion_text)
 
         # (batch, hidden_size) — last token activations at target layer
         h = get_last_token_hidden_states(
@@ -218,7 +249,6 @@ def generate_verification_responses(
         formatted = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
         inputs = tokenizer(formatted, return_tensors="pt", truncation=True, max_length=512).to(device)
 
-        import torch
         with torch.no_grad():
             output_ids = model.generate(
                 **inputs,
