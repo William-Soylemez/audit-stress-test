@@ -169,14 +169,10 @@ def _evaluate(
     internalize_responses: List[str],
     run_internalization: bool = True,
 ):
-    """Core evaluation: single forward pass for probe scoring, optional internalization.
-
-    The probe only needs a forward pass (no autoregressive generation).
-    Generation is only used for the internalization check if requested.
-    """
+    """Core evaluation: generate responses then probe last token, optional internalization."""
     device = env.cfg.device
 
-    # Step 1: Score with linear probe (single forward pass per batch, no generation)
+    # Step 1: Generate response for each prompt, then probe last token
     scores = score_with_probe(
         model=env.model,
         tokenizer=env.tokenizer,
@@ -187,6 +183,7 @@ def _evaluate(
         layer=env.probe_layer,
         batch_size=env.cfg.score_batch_size,
         max_length=env.cfg.max_length,
+        max_new_tokens=env.cfg.max_new_tokens,
         device=device,
         probe_prefill=env.cfg.probe_prefill or "",
     )

@@ -105,7 +105,7 @@ def load_probe(probe_dir: str | Path, layer: int = 26) -> Tuple[torch.Tensor, to
 
 
 # ---------------------------------------------------------------------------
-# High-level: single forward pass probe scoring (no generation needed)
+# High-level: generate response then probe on last token
 # ---------------------------------------------------------------------------
 
 def score_with_probe(
@@ -118,18 +118,20 @@ def score_with_probe(
     layer: int,
     batch_size: int = 4,
     max_length: int = 512,
+    max_new_tokens: int = 256,
     device: str = "cuda",
     probe_prefill: str = "",
 ) -> list[dict]:
-    """Score user prompts with the 2-class linear probe in a single forward pass.
+    """Generate a full response for each prompt, then probe on the last token.
 
-    For each prompt, constructs: chat_template(system_prompt + user_prompt) + probe_prefill
-    then runs one forward pass to extract hidden states at the last token position.
+    For each prompt:
+      1. Construct chat_template(system_prompt + user_prompt)
+      2. Generate a full autoregressive response
+      3. Run a forward pass on the complete text (prompt + response)
+      4. Probe hidden states at the last token of the response
 
     Probe: sigmoid(activation @ weight.T + bias)
     Output index 0 = male, index 1 = female.
-
-    No autoregressive generation is performed — just a single forward pass per batch.
 
     Returns list of dicts with male_prob and female_prob for each example.
     """
@@ -139,17 +141,30 @@ def score_with_probe(
 
     all_results: list[dict] = []
 
-    for i in tqdm(range(0, len(user_prompts), batch_size), desc="Scoring with probe"):
-        batch_prompts = user_prompts[i : i + batch_size]
+    # Step 1: Generate full responses for all prompts
+    full_texts = []
+    for up in tqdm(user_prompts, desc="Generating responses"):
+        if system_prompt:
+            msgs = [{"role": "user", "content": system_prompt + "\n\n" + up}]
+        else:
+            msgs = [{"role": "user", "content": up}]
+        prefix = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+        prompt_text = prefix + probe_prefill
 
-        batch_texts = []
-        for up in batch_prompts:
-            if system_prompt:
-                msgs = [{"role": "user", "content": system_prompt + "\n\n" + up}]
-            else:
-                msgs = [{"role": "user", "content": up}]
-            prefix = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
-            batch_texts.append(prefix + probe_prefill)
+        inputs = tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=max_length).to(device)
+        with torch.no_grad():
+            output_ids = model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+            )
+        # Decode the full sequence (prompt + generated response) as the text to probe
+        full_text = tokenizer.decode(output_ids[0], skip_special_tokens=False)
+        full_texts.append(full_text)
+
+    # Step 2: Probe on the last token of each full text in batches
+    for i in tqdm(range(0, len(full_texts), batch_size), desc="Probing last token"):
+        batch_texts = full_texts[i : i + batch_size]
 
         # (batch, hidden_size) — last token activations at target layer
         h = get_last_token_hidden_states(
