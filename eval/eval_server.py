@@ -115,6 +115,7 @@ def run_evaluation_sync(prompt: str, run_internalization: bool = True, env_kwarg
             "env_kwargs": env_kwargs,
             "audit_results": result["audit_results"],
             "internalize_results": result.get("internalize_results", []) if run_internalization else [],
+            "verification_outputs": result.get("verification_outputs", []),
             **metrics,
         }
         log_path = _results_dir / "full_results.jsonl"
