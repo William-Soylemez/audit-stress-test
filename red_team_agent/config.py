@@ -17,6 +17,8 @@ METHOD_NAMES = {
     # User gender environments (Qwen)
     "user_gender_prefill_qwen": "Prefill",
     "user_gender_user_persona_qwen": "User Persona",
+    # Chinese censorship
+    "chinese_censorship_deception_probe": "Deception Probe (Chinese Censorship)",
 }
 
 

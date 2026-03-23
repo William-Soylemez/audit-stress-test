@@ -172,6 +172,7 @@ async def main():
             "user_gender_prefill", "user_gender_prefill_qwen",
             "user_gender_user_persona", "user_gender_user_persona_qwen",
             "user_gender_sae_desc", "user_gender_probe", "user_gender_deception_probe",
+            "chinese_censorship_deception_probe",
         ],
         help="Target environment",
     )
