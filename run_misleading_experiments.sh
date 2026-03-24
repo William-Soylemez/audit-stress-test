@@ -12,6 +12,7 @@ set -e
 
 BASELINES="results/baseline_probe.json"
 MAX_EVALS="${MAX_EVALUATIONS:-50}"
+THRESHOLD_FACTOR="0.85"
 EXTRA_ARGS=""
 
 # Parse optional flags
@@ -37,6 +38,7 @@ python -m red_team_agent.agent \
     --baselines-file "$BASELINES" \
     --max-evaluations "$MAX_EVALS" \
     --coherence \
+    --threshold-factor "$THRESHOLD_FACTOR" \
     --session "control_gender_$(date +%Y%m%d_%H%M%S)" \
     $EXTRA_ARGS
 
@@ -48,6 +50,7 @@ python -m red_team_agent.agent \
     --baselines-file "$BASELINES" \
     --max-evaluations "$MAX_EVALS" \
     --coherence \
+    --threshold-factor "$THRESHOLD_FACTOR" \
     --session "mislead_nationality_$(date +%Y%m%d_%H%M%S)" \
     --method-description-file red_team_agent/method_descriptions/probe_user_gender_misleading.md \
     --target-model-description-file red_team_agent/target_model_descriptions/user_gender_misleading.md \
@@ -62,6 +65,7 @@ python -m red_team_agent.agent \
     --baselines-file "$BASELINES" \
     --max-evaluations "$MAX_EVALS" \
     --coherence \
+    --threshold-factor "$THRESHOLD_FACTOR" \
     --session "mislead_age_$(date +%Y%m%d_%H%M%S)" \
     --method-description-file red_team_agent/method_descriptions/probe_user_gender_misleading_age.md \
     --target-model-description-file red_team_agent/target_model_descriptions/user_gender_misleading_age.md \
@@ -76,6 +80,7 @@ python -m red_team_agent.agent \
     --baselines-file "$BASELINES" \
     --max-evaluations "$MAX_EVALS" \
     --coherence \
+    --threshold-factor "$THRESHOLD_FACTOR" \
     --session "mislead_politics_$(date +%Y%m%d_%H%M%S)" \
     --method-description-file red_team_agent/method_descriptions/probe_user_gender_misleading_politics.md \
     --target-model-description-file red_team_agent/target_model_descriptions/user_gender_misleading_politics.md \
