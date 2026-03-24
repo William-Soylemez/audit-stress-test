@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Production evaluation server for auditing prompts.
 
 Runs on runpod with GPU access. Loads environment on startup and performs
@@ -45,7 +47,7 @@ class EvalRequest(BaseModel):
     mode: str = "red"  # Train split: "red" or "blue"
 
 
-def get_env(env_name: str, probe_prefill: str | None = None):
+def get_env(env_name: str, probe_prefill: str | None = None, run_coherence: bool = False):
     """Load environment with fast evaluation settings.
 
     Uses direct_parse=True to skip auditor entirely and check constraint
@@ -79,7 +81,7 @@ def get_env(env_name: str, probe_prefill: str | None = None):
         env = UserGenderSAEDesc(UserGenderSAEDescConfig())
     elif env_name == "user_gender_probe":
         from envs.user_gender.user_gender_probe.env import UserGenderProbe, UserGenderProbeConfig
-        env = UserGenderProbe(UserGenderProbeConfig(probe_prefill=probe_prefill))
+        env = UserGenderProbe(UserGenderProbeConfig(probe_prefill=probe_prefill, run_coherence=run_coherence))
     elif env_name == "user_gender_deception_probe":
         from envs.user_gender.user_gender_deception_probe.env import UserGenderDeceptionProbe, UserGenderDeceptionProbeConfig
         env = UserGenderDeceptionProbe(UserGenderDeceptionProbeConfig())
@@ -208,11 +210,13 @@ def main():
     parser.add_argument("--probe-prefill", type=str, default=None,
                        help="Prefill string for probe scoring (e.g. 'I think the gender of this user is'). "
                             "Only applies to probe environments.")
+    parser.add_argument("--coherence", action="store_true",
+                       help="Enable coherence scoring (response perplexity). Only applies to probe environments.")
     args = parser.parse_args()
 
     # Load environment on startup
     _env_name = args.env
-    _env = get_env(_env_name, probe_prefill=args.probe_prefill)
+    _env = get_env(_env_name, probe_prefill=args.probe_prefill, run_coherence=args.coherence)
 
     # Set up results directory (default to timestamped dir)
     if args.results_dir:
@@ -226,6 +230,8 @@ def main():
     print(f"Environment: {_env_name}")
     if args.probe_prefill:
         print(f"Probe prefill: \"{args.probe_prefill}\"")
+    if args.coherence:
+        print("Coherence scoring: enabled")
     print(f"Results directory: {_results_dir}")
     print("This is the production server - evaluations use real GPU inference")
     uvicorn.run(app, host="0.0.0.0", port=args.port)

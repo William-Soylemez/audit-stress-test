@@ -23,11 +23,13 @@ def main():
     parser.add_argument("--output", type=str, required=True)
     parser.add_argument("--run-internalization", action="store_true", default=True)
     parser.add_argument("--no-internalization", action="store_false", dest="run_internalization")
+    parser.add_argument("--coherence", action="store_true",
+                        help="Enable coherence scoring (response perplexity)")
     args = parser.parse_args()
 
     if args.env == "user_gender_probe":
         from envs.user_gender.user_gender_probe.env import UserGenderProbe, UserGenderProbeConfig
-        cfg = UserGenderProbeConfig(run_control=True)
+        cfg = UserGenderProbeConfig(run_control=True, run_coherence=args.coherence)
         env = UserGenderProbe(cfg)
     elif args.env == "user_gender_deception_probe":
         from envs.user_gender.user_gender_deception_probe.env import (
@@ -58,6 +60,10 @@ def main():
         "audit_mean_confidence": metrics["audit_mean_confidence"],
         "internalize_accuracy": metrics.get("internalize_accuracy", 1.0),
     }
+
+    if "mean_perplexity" in metrics:
+        baseline["baseline_perplexity"] = metrics["mean_perplexity"]
+        print(f"\nBaseline perplexity: {metrics['mean_perplexity']:.4f}")
 
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w") as f:

@@ -21,6 +21,8 @@ from envs.user_gender.user_gender_probe.extract_and_score import (
     load_probe,
     score_with_probe,
     probe_scores_to_audit_results,
+    generate_responses,
+    compute_response_perplexity,
 )
 
 
@@ -42,6 +44,7 @@ class UserGenderProbeConfig:
     score_batch_size: int = 4
     internalize_batch_size: int = 64
     device: str = "cuda"
+    run_coherence: bool = False
 
 
 @dataclass
@@ -200,11 +203,38 @@ def _evaluate(
             internalize_responses=internalize_responses,
         )
 
+    # Step 4: Coherence check (optional — generates responses and measures perplexity)
+    mean_perplexity = None
+    if env.cfg.run_coherence:
+        responses = generate_responses(
+            model=env.model,
+            tokenizer=env.tokenizer,
+            user_prompts=user_prompts,
+            system_prompt=system_prompt,
+            max_new_tokens=env.cfg.max_new_tokens,
+            batch_size=env.cfg.gen_batch_size,
+            device=device,
+        )
+        prompt_texts = [r[0] for r in responses]
+        response_texts = [r[1] for r in responses]
+        perplexities = compute_response_perplexity(
+            model=env.model,
+            tokenizer=env.tokenizer,
+            user_prompts=prompt_texts,
+            responses=response_texts,
+            device=device,
+        )
+        # Filter out inf values before averaging
+        finite_ppls = [p for p in perplexities if p != float("inf")]
+        mean_perplexity = sum(finite_ppls) / len(finite_ppls) if finite_ppls else float("inf")
+
     results = {
         "system_prompt": system_prompt,
         "audit_results": audit_results,
     }
     if internalization_results is not None:
         results["internalize_results"] = internalization_results
+    if mean_perplexity is not None:
+        results["mean_perplexity"] = mean_perplexity
 
     return results

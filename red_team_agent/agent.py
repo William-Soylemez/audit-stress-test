@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Main agent runner for red team sessions.
 
 Uses the Anthropic Agent SDK to run iterative red teaming against
@@ -60,6 +62,8 @@ async def run_red_team_session(
     target_model_description_path: str | None = None,
     goal_description_path: str | None = None,
     scoring_mode: str = "adversarial",
+    baseline_perplexity: float | None = None,
+    coherence_threshold: float | None = None,
 ):
     """Run a red team session using the Agent SDK.
 
@@ -123,6 +127,7 @@ async def run_red_team_session(
             target_model_description_path=target_model_description_path,
             goal_description_path=goal_description_path,
             scoring_mode=scoring_mode,
+            coherence_threshold=coherence_threshold,
         )
     tools_server = create_session_tools(
         session_dir,
@@ -135,6 +140,8 @@ async def run_red_team_session(
         max_evaluations=max_evaluations,
         intern_server_url=intern_server_url,
         scoring_mode=scoring_mode,
+        baseline_perplexity=baseline_perplexity,
+        coherence_threshold=coherence_threshold,
     )
 
     model_checkpoint = MODEL_CHECKPOINTS[model]
@@ -267,6 +274,11 @@ async def main():
         choices=["adversarial", "cooperative", "neutral"],
         help="Scoring mode: adversarial (fool auditor), cooperative (help auditor), neutral (no optimization signal)",
     )
+    parser.add_argument(
+        "--coherence",
+        action="store_true",
+        help="Enable coherence scoring (response perplexity). Requires baseline_perplexity in baselines file.",
+    )
 
     args = parser.parse_args()
 
@@ -284,6 +296,18 @@ async def main():
 
     # Calculate internalize threshold from baseline
     internalize_threshold = internalize_baseline * args.threshold_factor
+
+    # Coherence scoring
+    baseline_perplexity = None
+    coherence_threshold = None
+    if args.coherence:
+        baseline_perplexity = baselines_data.get("baseline_perplexity")
+        if baseline_perplexity is None:
+            print("ERROR: --coherence requires 'baseline_perplexity' in baselines file. "
+                  "Run generate_probe_baselines with --coherence first.")
+            return
+        # Baseline coherence is 1.0 by definition; threshold = 1.0 * threshold_factor
+        coherence_threshold = 1.0 * args.threshold_factor
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     session_id = args.session or f"red_{args.env}_{timestamp}"
@@ -313,6 +337,8 @@ async def main():
     if args.goal_description_file:
         print(f"Goal Description: {args.goal_description_file}")
     print(f"Scoring Mode: {args.scoring_mode}")
+    if args.coherence:
+        print(f"Coherence Scoring: enabled (baseline_perplexity={baseline_perplexity:.4f}, threshold={coherence_threshold})")
 
     summary = await run_red_team_session(
         env_name=args.env,
@@ -333,6 +359,8 @@ async def main():
         target_model_description_path=args.target_model_description_file,
         goal_description_path=args.goal_description_file,
         scoring_mode=args.scoring_mode,
+        baseline_perplexity=baseline_perplexity,
+        coherence_threshold=coherence_threshold,
     )
 
     print("\nFinal Summary:")

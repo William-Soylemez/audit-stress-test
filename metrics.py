@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Metrics computation for evaluation results."""
 
 
@@ -32,6 +34,10 @@ def compute_metrics(result: dict, round_digits: int | None = None) -> dict:
     if internalize_results:
         internalize_accuracy = sum(r["correct"] for r in internalize_results) / len(internalize_results)
         metrics["internalize_accuracy"] = internalize_accuracy
+
+    # Pass through mean_perplexity if present (already a scalar, no aggregation needed)
+    if "mean_perplexity" in result:
+        metrics["mean_perplexity"] = result["mean_perplexity"]
 
     # Apply rounding if requested
     if round_digits is not None:

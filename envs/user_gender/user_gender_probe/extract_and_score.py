@@ -172,6 +172,132 @@ def score_with_probe(
     return all_results
 
 
+# ---------------------------------------------------------------------------
+# Autoregressive generation (for coherence scoring)
+# ---------------------------------------------------------------------------
+
+def generate_responses(
+    model,
+    tokenizer,
+    user_prompts: list[str],
+    system_prompt: str | None,
+    max_new_tokens: int = 256,
+    batch_size: int = 4,
+    device: str = "cuda",
+) -> list[tuple[str, str]]:
+    """Batched autoregressive generation.
+
+    Returns list of (prompt_text, completion_text) pairs.
+    """
+    tokenizer.padding_side = "left"
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    results: list[tuple[str, str]] = []
+
+    for i in tqdm(range(0, len(user_prompts), batch_size), desc="Generating responses"):
+        batch_prompts = user_prompts[i : i + batch_size]
+
+        batch_texts = []
+        for up in batch_prompts:
+            if system_prompt:
+                msgs = [{"role": "user", "content": system_prompt + "\n\n" + up}]
+            else:
+                msgs = [{"role": "user", "content": up}]
+            prefix = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+            batch_texts.append(prefix)
+
+        encoded = tokenizer(
+            batch_texts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=512,
+            return_attention_mask=True,
+        )
+        input_ids = encoded["input_ids"].to(device)
+        attention_mask = encoded["attention_mask"].to(device)
+        prompt_len = input_ids.shape[1]
+
+        with torch.no_grad():
+            output_ids = model.generate(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                pad_token_id=tokenizer.pad_token_id,
+            )
+
+        for j, (prompt_text, out) in enumerate(zip(batch_texts, output_ids)):
+            completion_ids = out[prompt_len:]
+            completion_text = tokenizer.decode(completion_ids, skip_special_tokens=True)
+            results.append((batch_prompts[j], completion_text))
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Response perplexity (for coherence scoring)
+# ---------------------------------------------------------------------------
+
+def compute_response_perplexity(
+    model,
+    tokenizer,
+    user_prompts: list[str],
+    responses: list[str],
+    device: str = "cuda",
+) -> list[float]:
+    """Compute per-example perplexity of responses given user prompts (no system prompt).
+
+    For each (user_prompt, response), tokenizes chat_template(user_prompt) + response,
+    runs a forward pass, and computes cross-entropy loss on response tokens only.
+    Processes one example at a time to avoid padding artifacts.
+
+    Returns list of per-example perplexities.
+    """
+    import math
+
+    tokenizer.padding_side = "left"
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    perplexities: list[float] = []
+
+    for user_prompt, response in tqdm(
+        zip(user_prompts, responses), total=len(user_prompts), desc="Computing perplexity"
+    ):
+        # Build the full text: chat_template(user_prompt only) + response
+        msgs = [{"role": "user", "content": user_prompt}]
+        prefix = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+
+        prefix_ids = tokenizer.encode(prefix, return_tensors="pt", add_special_tokens=False).to(device)
+        full_text = prefix + response
+        full_ids = tokenizer.encode(full_text, return_tensors="pt", add_special_tokens=False).to(device)
+
+        response_start = prefix_ids.shape[1]
+
+        # Skip if response is empty
+        if full_ids.shape[1] <= response_start:
+            perplexities.append(float("inf"))
+            continue
+
+        with torch.no_grad():
+            outputs = model(input_ids=full_ids)
+            logits = outputs.logits  # (1, seq_len, vocab_size)
+
+        # Shift: predict token t+1 from logits at position t
+        # We want loss on response tokens: positions response_start to end
+        shift_logits = logits[:, response_start - 1 : -1, :].contiguous()
+        shift_labels = full_ids[:, response_start:].contiguous()
+
+        loss_fn = torch.nn.CrossEntropyLoss()
+        loss = loss_fn(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+        ppl = math.exp(loss.item())
+        perplexities.append(ppl)
+
+    return perplexities
+
+
 def probe_scores_to_audit_results(
     scores: list[dict],
     target_gender: str,
