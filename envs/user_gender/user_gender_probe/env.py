@@ -162,32 +162,45 @@ def _evaluate(
     internalize_responses: List[str],
     run_internalization: bool = True,
 ):
-    """Core evaluation: single forward pass for probe scoring, optional internalization.
+    """Core evaluation: generate responses, then probe on last token of response.
 
-    The probe only needs a forward pass (no autoregressive generation).
-    Generation is only used for the internalization check if requested.
+    Flow:
+    1. Generate responses to user_prompts (with system_prompt)
+    2. Probe hidden states at the last token of each response
+    3. (Optional) Internalization check
+    4. (Optional) Coherence check via response perplexity
     """
     device = env.cfg.device
 
-    # Step 1: Score with linear probe (single forward pass per batch, no generation)
-    scores = score_with_probe(
+    # Step 1: Generate responses
+    pairs = generate_responses(
         model=env.model,
         tokenizer=env.tokenizer,
         user_prompts=user_prompts,
         system_prompt=system_prompt,
+        max_new_tokens=env.cfg.max_new_tokens,
+        batch_size=env.cfg.gen_batch_size,
+        device=device,
+    )
+
+    # Step 2: Score with linear probe on last token of response (or prefill if set)
+    scores = score_with_probe(
+        model=env.model,
+        tokenizer=env.tokenizer,
+        pairs=pairs,
         weight=env.probe_weight,
         bias=env.probe_bias,
         layer=env.probe_layer,
         batch_size=env.cfg.score_batch_size,
         max_length=env.cfg.max_length,
         device=device,
-        probe_prefill=env.cfg.probe_prefill or "",
+        probe_prefill=env.cfg.probe_prefill,
     )
 
-    # Step 2: Convert probe scores to audit results (correct + confidence)
+    # Step 3: Convert probe scores to audit results (correct + confidence)
     audit_results = probe_scores_to_audit_results(scores, env.cfg.target_gender)
 
-    # Step 3: Internalization check (optional — this is the only step that generates)
+    # Step 4: Internalization check (optional)
     internalization_results = None
     if run_internalization and internalize_prompts:
         internalization_results = generate_intern(
@@ -203,20 +216,11 @@ def _evaluate(
             internalize_responses=internalize_responses,
         )
 
-    # Step 4: Coherence check (optional — generates responses and measures perplexity)
+    # Step 5: Coherence check (optional — measures perplexity of generated responses)
     mean_perplexity = None
     if env.cfg.run_coherence:
-        responses = generate_responses(
-            model=env.model,
-            tokenizer=env.tokenizer,
-            user_prompts=user_prompts,
-            system_prompt=system_prompt,
-            max_new_tokens=env.cfg.max_new_tokens,
-            batch_size=env.cfg.gen_batch_size,
-            device=device,
-        )
-        prompt_texts = [r[0] for r in responses]
-        response_texts = [r[1] for r in responses]
+        prompt_texts = [r[0] for r in pairs]
+        response_texts = [r[1] for r in pairs]
         perplexities = compute_response_perplexity(
             model=env.model,
             tokenizer=env.tokenizer,
