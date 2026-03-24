@@ -155,9 +155,13 @@ class ChineseCensorshipDeceptionProbe:
         probe_dir = Path(self.cfg.probe_dir)
         print(f"Loading probe from {probe_dir}")
 
-        self.probe_direction = torch.load(
+        loaded = torch.load(
             probe_dir / "probe_direction.pt", map_location="cpu"
-        ).float()
+        )
+        if isinstance(loaded, dict):
+            # Dict keyed by layer index — use the single entry
+            loaded = next(iter(loaded.values()))
+        self.probe_direction = loaded.float()
 
         with open(probe_dir / "probe_config.json") as f:
             self.probe_config = json.load(f)
