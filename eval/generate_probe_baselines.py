@@ -29,7 +29,7 @@ def main():
 
     if args.env == "user_gender_probe":
         from envs.user_gender.user_gender_probe.env import UserGenderProbe, UserGenderProbeConfig
-        cfg = UserGenderProbeConfig(run_control=True, run_coherence=args.coherence)
+        cfg = UserGenderProbeConfig(run_coherence=args.coherence)
         env = UserGenderProbe(cfg)
     elif args.env == "user_gender_deception_probe":
         from envs.user_gender.user_gender_deception_probe.env import (
