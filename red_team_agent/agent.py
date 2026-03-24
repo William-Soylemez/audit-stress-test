@@ -64,6 +64,7 @@ async def run_red_team_session(
     scoring_mode: str = "adversarial",
     baseline_perplexity: float | None = None,
     coherence_threshold: float | None = None,
+    use_confidence: bool = False,
 ):
     """Run a red team session using the Agent SDK.
 
@@ -122,7 +123,7 @@ async def run_red_team_session(
             audit_only=audit_only,
             audit_threshold=audit_threshold,
             internalize_threshold=internalize_threshold,
-            confidence_threshold=confidence_threshold,
+            confidence_threshold=confidence_threshold if use_confidence else None,
             method_description_path=method_description_path,
             target_model_description_path=target_model_description_path,
             goal_description_path=goal_description_path,
@@ -142,6 +143,8 @@ async def run_red_team_session(
         scoring_mode=scoring_mode,
         baseline_perplexity=baseline_perplexity,
         coherence_threshold=coherence_threshold,
+        use_confidence=use_confidence,
+        confidence_threshold=confidence_threshold,
     )
 
     model_checkpoint = MODEL_CHECKPOINTS[model]
@@ -279,6 +282,11 @@ async def main():
         action="store_true",
         help="Enable coherence scoring (response perplexity). Requires baseline_perplexity in baselines file.",
     )
+    parser.add_argument(
+        "--confidence",
+        action="store_true",
+        help="Include audit confidence as a scoring component and success criterion.",
+    )
 
     args = parser.parse_args()
 
@@ -322,10 +330,7 @@ async def main():
         print("Intern Server: None (legacy single-server mode)")
     print(f"Max Evaluations: {args.max_evaluations}")
     print(f"Baselines File: {args.baselines_file}")
-    print(f"Audit Threshold: {audit_threshold}")
-    print(f"Confidence Threshold: {confidence_threshold}")
-    print(f"Internalize Baseline: {internalize_baseline}")
-    print(f"Internalize Threshold: {internalize_threshold} (baseline * {args.threshold_factor})")
+    print(f"Scoring Mode: {args.scoring_mode}")
     if args.audit_only:
         print("Mode: Audit-only (internalization scoring disabled)")
     if args.system_prompt_file:
@@ -336,9 +341,23 @@ async def main():
         print(f"Target Model Description: {args.target_model_description_file}")
     if args.goal_description_file:
         print(f"Goal Description: {args.goal_description_file}")
-    print(f"Scoring Mode: {args.scoring_mode}")
+
+    # Scoring factors summary
+    factors = []
+    if args.scoring_mode == "cooperative":
+        factors.append(f"  audit_accuracy      baseline={baselines_data['audit_accuracy']:.4f}  threshold={audit_threshold:.4f}")
+    else:
+        factors.append(f"  audit_error         baseline={1 - baselines_data['audit_accuracy']:.4f}  threshold={audit_threshold:.4f}")
+    if args.confidence:
+        factors.append(f"  audit_confidence    baseline={confidence_threshold:.4f}  threshold={confidence_threshold:.4f}")
+    if not args.audit_only:
+        factors.append(f"  internalize_acc     baseline={internalize_baseline:.4f}  threshold={internalize_threshold:.4f}  (baseline * {args.threshold_factor})")
     if args.coherence:
-        print(f"Coherence Scoring: enabled (baseline_perplexity={baseline_perplexity:.4f}, threshold={coherence_threshold})")
+        factors.append(f"  coherence_score     baseline=1.0000  threshold={coherence_threshold:.4f}  (baseline_ppl={baseline_perplexity:.4f})")
+    print(f"\n--- Scoring Factors ({len(factors)} components, equal weight) ---")
+    for i, f in enumerate(factors, 1):
+        print(f"  {i}.{f}")
+    print("---")
 
     summary = await run_red_team_session(
         env_name=args.env,
@@ -361,6 +380,7 @@ async def main():
         scoring_mode=args.scoring_mode,
         baseline_perplexity=baseline_perplexity,
         coherence_threshold=coherence_threshold,
+        use_confidence=args.confidence,
     )
 
     print("\nFinal Summary:")
