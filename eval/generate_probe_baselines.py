@@ -19,7 +19,8 @@ from metrics import compute_metrics
 def main():
     parser = argparse.ArgumentParser(description="Generate probe env baselines")
     parser.add_argument("--env", type=str, required=True,
-                        choices=["user_gender_probe", "user_gender_deception_probe"])
+                        choices=["user_gender_probe", "user_gender_deception_probe",
+                                 "chinese_censorship_deception_probe"])
     parser.add_argument("--output", type=str, required=True)
     parser.add_argument("--run-internalization", action="store_true", default=True)
     parser.add_argument("--no-internalization", action="store_false", dest="run_internalization")
@@ -37,6 +38,12 @@ def main():
         )
         cfg = UserGenderDeceptionProbeConfig()
         env = UserGenderDeceptionProbe(cfg)
+    elif args.env == "chinese_censorship_deception_probe":
+        from envs.chinese_censorship.env import (
+            ChineseCensorshipDeceptionProbe, ChineseCensorshipConfig,
+        )
+        cfg = ChineseCensorshipConfig(run_coherence=args.coherence)
+        env = ChineseCensorshipDeceptionProbe(cfg)
 
     print(f"\nRunning baseline evaluation (no system prompt) for {args.env}...")
     result = env.evaluate(system_prompt=None, run_internalization=args.run_internalization)
