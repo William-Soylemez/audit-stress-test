@@ -20,6 +20,8 @@ METHOD_NAMES = {
     # User gender environments (Qwen)
     "user_gender_prefill_qwen": "Prefill",
     "user_gender_user_persona_qwen": "User Persona",
+    # Chinese censorship environments
+    "chinese_censorship_deception_probe": "Deception Probe",
 }
 
 # Default paths for description files per environment
@@ -77,6 +79,12 @@ DEFAULT_DESCRIPTION_PATHS = {
         "method": "red_team_agent/method_descriptions/user_persona_user_gender.md",
         "target_model": "red_team_agent/target_model_descriptions/user_gender.md",
         "goal": "red_team_agent/goal_descriptions/user_gender_user_persona.md",
+    },
+    # Chinese censorship environments
+    "chinese_censorship_deception_probe": {
+        "method": "red_team_agent/method_descriptions/deception_probe_chinese_censorship.md",
+        "target_model": "red_team_agent/target_model_descriptions/chinese_censorship.md",
+        "goal": "red_team_agent/goal_descriptions/chinese_censorship_deception_probe.md",
     },
 }
 
