@@ -78,7 +78,7 @@ def get_env(env_name: str, probe_prefill: str | None = None, run_coherence: bool
         env = UserGenderUserPersona(UserGenderUserPersonaConfigQwen())
     elif env_name == "user_gender_sae_desc":
         from envs.user_gender.user_gender_sae_desc.env import UserGenderSAEDesc, UserGenderSAEDescConfig
-        env = UserGenderSAEDesc(UserGenderSAEDescConfig())
+        env = UserGenderSAEDesc(UserGenderSAEDescConfig(run_coherence=run_coherence))
     elif env_name == "user_gender_probe":
         from envs.user_gender.user_gender_probe.env import UserGenderProbe, UserGenderProbeConfig
         env = UserGenderProbe(UserGenderProbeConfig(probe_prefill=probe_prefill, run_coherence=run_coherence))

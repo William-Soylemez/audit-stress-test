@@ -19,7 +19,7 @@ from metrics import compute_metrics
 def main():
     parser = argparse.ArgumentParser(description="Generate probe env baselines")
     parser.add_argument("--env", type=str, required=True,
-                        choices=["user_gender_probe", "user_gender_deception_probe"])
+                        choices=["user_gender_probe", "user_gender_deception_probe", "user_gender_sae_desc"])
     parser.add_argument("--output", type=str, required=True)
     parser.add_argument("--run-internalization", action="store_true", default=True)
     parser.add_argument("--no-internalization", action="store_false", dest="run_internalization")
@@ -37,6 +37,12 @@ def main():
         )
         cfg = UserGenderDeceptionProbeConfig()
         env = UserGenderDeceptionProbe(cfg)
+    elif args.env == "user_gender_sae_desc":
+        from envs.user_gender.user_gender_sae_desc.env import (
+            UserGenderSAEDesc, UserGenderSAEDescConfig,
+        )
+        cfg = UserGenderSAEDescConfig(run_coherence=args.coherence)
+        env = UserGenderSAEDesc(cfg)
 
     print(f"\nRunning baseline evaluation (no system prompt) for {args.env}...")
     result = env.evaluate(system_prompt=None, run_internalization=args.run_internalization)

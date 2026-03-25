@@ -13,6 +13,10 @@ from envs.user_gender.user_gender_internalization import (
 )
 from envs.user_gender.user_gender_sae_desc.extract_features import generate
 from envs.user_gender.user_gender_sae_desc.audit_features import audit
+from envs.user_gender.user_gender_probe.extract_and_score import (
+    generate_responses,
+    compute_response_perplexity,
+)
 
 
 @dataclass
@@ -44,6 +48,9 @@ class UserGenderSAEDescConfig:
     sae_extract_batch_size: int = 16
     audit_top_k: int = 50
     audit_num_guesses: int = 1
+    run_coherence: bool = False
+    max_new_tokens: int = 256
+    gen_batch_size: int = 4
     device: str = "cuda"
 
 
@@ -237,7 +244,21 @@ def _evaluate(
     env.sae.to("cpu")
     torch.cuda.empty_cache()
 
-    # Step 2: Audit SAE features (adapter OFF = base auditor model)
+    # Step 2: Generate responses (adapter ON = target model) for coherence scoring
+    pairs = None
+    if env.cfg.run_coherence:
+        env.model.enable_adapter_layers()
+        pairs = generate_responses(
+            model=env.model,
+            tokenizer=env.tokenizer,
+            user_prompts=user_prompts,
+            system_prompt=system_prompt,
+            max_new_tokens=env.cfg.max_new_tokens,
+            batch_size=env.cfg.gen_batch_size,
+            device=env.cfg.device,
+        )
+
+    # Step 3: Audit SAE features (adapter OFF = base auditor model)
     env.model.disable_adapter_layers()
     auditing_results = audit(
         feature_results=extract_results,
@@ -262,7 +283,7 @@ def _evaluate(
         confidence_batch_size=env.cfg.confidence_batch_size,
     )
 
-    # Step 3: Evaluate internalization (optional, adapter ON = target model)
+    # Step 4: Evaluate internalization (optional, adapter ON = target model)
     internalization_results = None
     if run_internalization:
         env.model.enable_adapter_layers()
@@ -279,6 +300,22 @@ def _evaluate(
             internalize_responses=internalize_responses,
         )
 
+    # Step 5: Coherence check (optional — measures perplexity of generated responses)
+    mean_perplexity = None
+    if env.cfg.run_coherence and pairs is not None:
+        env.model.enable_adapter_layers()
+        prompt_texts = [r[0] for r in pairs]
+        response_texts = [r[1] for r in pairs]
+        perplexities = compute_response_perplexity(
+            model=env.model,
+            tokenizer=env.tokenizer,
+            user_prompts=prompt_texts,
+            responses=response_texts,
+            device=env.cfg.device,
+        )
+        finite_ppls = [p for p in perplexities if p != float("inf")]
+        mean_perplexity = sum(finite_ppls) / len(finite_ppls) if finite_ppls else float("inf")
+
     # Reload SAE model back to GPU for next evaluation call
     env.sae_model.to(env.cfg.device)
     env.sae.to(env.cfg.device)
@@ -289,5 +326,7 @@ def _evaluate(
     }
     if internalization_results is not None:
         results["internalize_results"] = internalization_results
+    if mean_perplexity is not None:
+        results["mean_perplexity"] = mean_perplexity
 
     return results
