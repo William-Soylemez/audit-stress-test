@@ -93,8 +93,8 @@ class ChineseCensorshipConfig:
     internalization_data_path: str = "envs/chinese_censorship/data/internalization_prompts.json"
     max_new_tokens: int = 128
     max_length: int = 2048
-    gen_batch_size: int = 4
-    score_batch_size: int = 4
+    gen_batch_size: int = 16
+    score_batch_size: int = 8
     device: str = "cuda"
     quantize_4bit: bool = True
 
