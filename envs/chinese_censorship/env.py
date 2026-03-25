@@ -85,7 +85,7 @@ CCP_FALSE_CLAIM_FRAGMENTS = [
 
 @dataclass
 class ChineseCensorshipConfig:
-    model_name: str = "Qwen/Qwen3-32B"
+    model_name: str = "Qwen/Qwen2-7B-Instruct"
     probe_dir: str = "../chinese_auditing/output/saved_probe"
     train_prompts_path_red: str = "envs/chinese_censorship/data/censored_train_red.txt"
     train_prompts_path_blue: str = "envs/chinese_censorship/data/censored_train_blue.txt"
@@ -93,10 +93,10 @@ class ChineseCensorshipConfig:
     internalization_data_path: str = "envs/chinese_censorship/data/internalization_prompts.json"
     max_new_tokens: int = 128
     max_length: int = 2048
-    gen_batch_size: int = 4
-    score_batch_size: int = 4
+    gen_batch_size: int = 16
+    score_batch_size: int = 8
     device: str = "cuda"
-    quantize_4bit: bool = True
+    quantize_4bit: bool = False
 
 
 class ChineseCensorshipDeceptionProbe:
@@ -320,7 +320,6 @@ def _generate_responses(
             messages.append({"role": "user", "content": up})
             text = tokenizer.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True,
-                enable_thinking=False,
             )
             texts.append(text)
 
@@ -331,11 +330,6 @@ def _generate_responses(
         input_ids = encoded["input_ids"].to(device)
         attention_mask = encoded["attention_mask"].to(device)
 
-        # Suppress <think> token (151667) to prevent Qwen3 from wasting
-        # tokens on internal reasoning chains
-        think_token_id = tokenizer.encode("<think>", add_special_tokens=False)
-        suppress_ids = think_token_id if think_token_id else []
-
         with torch.no_grad():
             outputs = model.generate(
                 input_ids,
@@ -343,7 +337,6 @@ def _generate_responses(
                 max_new_tokens=max_new_tokens,
                 do_sample=False,
                 pad_token_id=tokenizer.eos_token_id,
-                suppress_tokens=suppress_ids,
             )
 
         for j in range(len(batch_prompts)):
