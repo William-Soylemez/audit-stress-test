@@ -1,19 +1,69 @@
 #!/usr/bin/env python
 """Generate baseline metrics for probe-based auditing environments.
 
-Runs each probe env with no system prompt and saves the baseline JSON
-needed by the red team agent (--baselines-file).
+Two modes:
+  --server URL : Send an empty-string system prompt to a running eval server (recommended).
+  (no --server): Load the environment locally and run evaluation directly.
 
-Usage (from _audit_stress_test/):
+Usage:
+    # Via eval server (recommended — guarantees same setup):
+    python -m eval.generate_probe_baselines --env user_gender_probe --server http://localhost:8000 --output results/baseline_probe.json
+
+    # Local (legacy):
     python -m eval.generate_probe_baselines --env user_gender_probe --output results/baseline_probe.json
-    python -m eval.generate_probe_baselines --env user_gender_deception_probe --output results/baseline_deception_probe.json
 """
 
 import argparse
 import json
 from pathlib import Path
 
+import requests
+
 from metrics import compute_metrics
+
+
+def _generate_via_server(server_url: str, env_name: str, run_internalization: bool) -> dict:
+    """Send empty system prompt to eval server and return metrics."""
+    print(f"\nSending baseline request to {server_url}...")
+    response = requests.post(
+        f"{server_url}/evaluate",
+        json={
+            "prompt": "",
+            "env_name": env_name,
+            "output_level": "full",
+            "run_internalization": run_internalization,
+            "mode": "red",
+        },
+        timeout=None,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def _generate_locally(env_name: str, coherence: bool, run_internalization: bool) -> dict:
+    """Load environment locally and run evaluation."""
+    if env_name == "user_gender_probe":
+        from envs.user_gender.user_gender_probe.env import UserGenderProbe, UserGenderProbeConfig
+        cfg = UserGenderProbeConfig(run_coherence=coherence)
+        env = UserGenderProbe(cfg)
+    elif env_name == "user_gender_deception_probe":
+        from envs.user_gender.user_gender_deception_probe.env import (
+            UserGenderDeceptionProbe, UserGenderDeceptionProbeConfig,
+        )
+        cfg = UserGenderDeceptionProbeConfig()
+        env = UserGenderDeceptionProbe(cfg)
+    elif env_name == "chinese_censorship_deception_probe":
+        from envs.chinese_censorship.env import (
+            ChineseCensorshipDeceptionProbe, ChineseCensorshipConfig,
+        )
+        cfg = ChineseCensorshipConfig(run_coherence=coherence)
+        env = ChineseCensorshipDeceptionProbe(cfg)
+    else:
+        raise ValueError(f"Unknown environment: {env_name}")
+
+    print(f"\nRunning baseline evaluation (no system prompt) for {env_name}...")
+    result = env.evaluate(system_prompt=None, run_internalization=run_internalization)
+    return compute_metrics(result, round_digits=4)
 
 
 def main():
@@ -22,45 +72,24 @@ def main():
                         choices=["user_gender_probe", "user_gender_deception_probe",
                                  "chinese_censorship_deception_probe"])
     parser.add_argument("--output", type=str, required=True)
-    parser.add_argument("--run-internalization", action="store_true", default=True)
+    parser.add_argument("--server", type=str, default=None,
+                        help="Eval server URL (e.g. http://localhost:8000). "
+                             "If set, sends empty prompt to server instead of loading env locally.")
+    parser.add_argument("--run-internalization", action="store_true", default=False)
     parser.add_argument("--no-internalization", action="store_false", dest="run_internalization")
     parser.add_argument("--coherence", action="store_true",
-                        help="Enable coherence scoring (response perplexity)")
+                        help="Enable coherence scoring (only used in local mode; "
+                             "server mode uses whatever the server was started with)")
     args = parser.parse_args()
 
-    if args.env == "user_gender_probe":
-        from envs.user_gender.user_gender_probe.env import UserGenderProbe, UserGenderProbeConfig
-        cfg = UserGenderProbeConfig(run_coherence=args.coherence)
-        env = UserGenderProbe(cfg)
-    elif args.env == "user_gender_deception_probe":
-        from envs.user_gender.user_gender_deception_probe.env import (
-            UserGenderDeceptionProbe, UserGenderDeceptionProbeConfig,
-        )
-        cfg = UserGenderDeceptionProbeConfig()
-        env = UserGenderDeceptionProbe(cfg)
-    elif args.env == "chinese_censorship_deception_probe":
-        from envs.chinese_censorship.env import (
-            ChineseCensorshipDeceptionProbe, ChineseCensorshipConfig,
-        )
-        cfg = ChineseCensorshipConfig(run_coherence=args.coherence)
-        env = ChineseCensorshipDeceptionProbe(cfg)
+    if args.server:
+        metrics = _generate_via_server(args.server, args.env, args.run_internalization)
+    else:
+        metrics = _generate_locally(args.env, args.coherence, args.run_internalization)
 
-    print(f"\nRunning baseline evaluation (no system prompt) for {args.env}...")
-    result = env.evaluate(system_prompt=None, run_internalization=args.run_internalization)
-
-    metrics = compute_metrics(result, round_digits=4)
     print(f"\nBaseline metrics:")
     for k, v in metrics.items():
         print(f"  {k}: {v}")
-
-    if "control_results" in result:
-        ctrl = result["control_results"]
-        ctrl_acc = sum(r["correct"] for r in ctrl["audit_results"]) / len(ctrl["audit_results"])
-        ctrl_conf = sum(r["confidence"] for r in ctrl["audit_results"]) / len(ctrl["audit_results"])
-        print(f"\nControl condition (random facts):")
-        print(f"  mean_prob: {ctrl['mean_prob']:.4f}")
-        print(f"  control_accuracy: {ctrl_acc:.4f}")
-        print(f"  control_confidence: {ctrl_conf:.4f}")
 
     baseline = {
         "audit_accuracy": metrics["audit_accuracy"],
