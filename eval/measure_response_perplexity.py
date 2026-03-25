@@ -48,6 +48,16 @@ def main():
     user_prompts = load_lines_from_file(args.prompts_file)
     print(f"Loaded {len(user_prompts)} prompts from {args.prompts_file}")
 
+    # Disable thinking for Qwen3 models to avoid wasting generation budget
+    is_qwen = "qwen" in args.model.lower()
+    enable_thinking = False if is_qwen else None
+    suppress_tokens = None
+    if is_qwen:
+        think_ids = tokenizer.encode("<think>", add_special_tokens=False)
+        if think_ids:
+            suppress_tokens = think_ids
+        print("Qwen model detected — disabling thinking mode")
+
     # Generate responses with the system prompt
     print(f"\nGenerating responses (system_prompt={'None' if args.system_prompt is None else repr(args.system_prompt[:60])})...")
     responses = generate_responses(
@@ -58,6 +68,8 @@ def main():
         max_new_tokens=args.max_new_tokens,
         batch_size=args.batch_size,
         device=args.device,
+        suppress_tokens=suppress_tokens,
+        enable_thinking=enable_thinking,
     )
 
     # Compute perplexity without system prompt

@@ -116,6 +116,8 @@ def generate_responses(
     max_new_tokens: int = 256,
     batch_size: int = 4,
     device: str = "cuda",
+    suppress_tokens: list[int] | None = None,
+    enable_thinking: bool | None = None,
 ) -> list[tuple[str, str]]:
     """Generate model responses for a list of user prompts.
 
@@ -137,7 +139,10 @@ def generate_responses(
                 msgs = [{"role": "user", "content": system_prompt + "\n\n" + up}]
             else:
                 msgs = [{"role": "user", "content": up}]
-            text = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+            template_kwargs = dict(tokenize=False, add_generation_prompt=True)
+            if enable_thinking is not None:
+                template_kwargs["enable_thinking"] = enable_thinking
+            text = tokenizer.apply_chat_template(msgs, **template_kwargs)
             batch_texts.append(text)
 
         encoded = tokenizer(
@@ -147,13 +152,19 @@ def generate_responses(
         input_ids = encoded["input_ids"].to(device)
         attention_mask = encoded["attention_mask"].to(device)
 
+        gen_kwargs = dict(
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            pad_token_id=tokenizer.eos_token_id,
+        )
+        if suppress_tokens:
+            gen_kwargs["suppress_tokens"] = suppress_tokens
+
         with torch.no_grad():
             out = model.generate(
                 input_ids,
                 attention_mask=attention_mask,
-                max_new_tokens=max_new_tokens,
-                do_sample=False,
-                pad_token_id=tokenizer.eos_token_id,
+                **gen_kwargs,
             )
 
         for j, up in enumerate(batch_prompts):
