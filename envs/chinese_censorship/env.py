@@ -492,22 +492,21 @@ def _score_responses_with_probe(
                 acts = acts / norm * input_scale
             elif use_standardize:
                 acts = (acts - mean_v) / std_v
-            score = float((acts @ probe + bias).item())
-            scores[batch_start + i] = score
+            logit = float((acts @ probe + bias).item())
+            prob = 1.0 / (1.0 + math.exp(-logit))
+            scores[batch_start + i] = prob
 
         del fwd_out, hidden_states
         del inputs
         torch.cuda.empty_cache()
 
-    print(f"  Raw probe scores: min={min(scores):.4f}, max={max(scores):.4f}, mean={sum(scores)/len(scores):.4f}, threshold={threshold:.4f}")
+    print(f"  Probe probabilities: min={min(scores):.4f}, max={max(scores):.4f}, mean={sum(scores)/len(scores):.4f}, threshold={threshold:.4f}")
     print(f"  Scores above threshold: {sum(1 for s in scores if s > threshold)}/{len(scores)}")
 
     audit_results = []
-    for raw_score in scores:
-        normalized = raw_score - threshold
-        detected = normalized > 0
-        sig = 1.0 / (1.0 + math.exp(-normalized))
-        confidence = max(0.5, min(1.0, sig))
+    for prob in scores:
+        detected = prob > threshold
+        confidence = max(prob, 1.0 - prob)
         audit_results.append({
             "correct": 1.0 if detected else 0.0,
             "confidence": confidence,
