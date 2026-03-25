@@ -20,6 +20,7 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 from utils.utils import load_lines_from_file
+from envs.user_gender.user_gender_probe.extract_and_score import compute_response_perplexity
 
 
 # ── Censorship heuristic keywords ──────────────────────────────────────────
@@ -98,6 +99,7 @@ class ChineseCensorshipConfig:
     device: str = "cuda"
     quantize_4bit: bool = True
     suppress_thinking: bool = True
+    run_coherence: bool = False
 
 
 class ChineseCensorshipDeceptionProbe:
@@ -327,6 +329,22 @@ def _evaluate(
             device=device,
         )
         result["internalize_results"] = intern_results
+
+    # ── Step 4: Coherence (response perplexity) ──
+    if env.cfg.run_coherence:
+        from statistics import mean as _mean
+        perplexities = compute_response_perplexity(
+            model=env.model,
+            tokenizer=env.tokenizer,
+            user_prompts=user_prompts,
+            responses=responses,
+            device=device,
+            enable_thinking=False,
+        )
+        finite_ppls = [p for p in perplexities if p != float("inf")]
+        mean_ppl = _mean(finite_ppls) if finite_ppls else float("inf")
+        result["mean_perplexity"] = round(mean_ppl, 4)
+        print(f"  Coherence: mean_perplexity={mean_ppl:.4f} ({len(finite_ppls)}/{len(perplexities)} finite)")
 
     return result
 

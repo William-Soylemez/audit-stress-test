@@ -251,6 +251,7 @@ def compute_response_perplexity(
     user_prompts: list[str],
     responses: list[str],
     device: str = "cuda",
+    enable_thinking: bool | None = None,
 ) -> list[float]:
     """Compute per-example perplexity of responses given user prompts (no system prompt).
 
@@ -273,7 +274,10 @@ def compute_response_perplexity(
     ):
         # Build the full text: chat_template(user_prompt only) + response
         msgs = [{"role": "user", "content": user_prompt}]
-        prefix = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+        template_kwargs = dict(tokenize=False, add_generation_prompt=True)
+        if enable_thinking is not None:
+            template_kwargs["enable_thinking"] = enable_thinking
+        prefix = tokenizer.apply_chat_template(msgs, **template_kwargs)
 
         prefix_ids = tokenizer.encode(prefix, return_tensors="pt", add_special_tokens=False).to(device)
         full_text = prefix + response

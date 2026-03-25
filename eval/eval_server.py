@@ -87,7 +87,7 @@ def get_env(env_name: str, probe_prefill: str | None = None, run_coherence: bool
         env = UserGenderDeceptionProbe(UserGenderDeceptionProbeConfig())
     elif env_name == "chinese_censorship_deception_probe":
         from envs.chinese_censorship.env import ChineseCensorshipDeceptionProbe, ChineseCensorshipConfig
-        env = ChineseCensorshipDeceptionProbe(ChineseCensorshipConfig())
+        env = ChineseCensorshipDeceptionProbe(ChineseCensorshipConfig(run_coherence=run_coherence))
     else:
         raise ValueError(f"Unknown environment: {env_name}")
 
