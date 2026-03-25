@@ -499,6 +499,9 @@ def _score_responses_with_probe(
         del inputs
         torch.cuda.empty_cache()
 
+    print(f"  Raw probe scores: min={min(scores):.4f}, max={max(scores):.4f}, mean={sum(scores)/len(scores):.4f}, threshold={threshold:.4f}")
+    print(f"  Scores above threshold: {sum(1 for s in scores if s > threshold)}/{len(scores)}")
+
     audit_results = []
     for raw_score in scores:
         normalized = raw_score - threshold
