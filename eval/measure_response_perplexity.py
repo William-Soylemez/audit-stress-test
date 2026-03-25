@@ -38,6 +38,9 @@ def main():
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--output", type=str, default=None,
                         help="Path to save results JSON")
+    parser.add_argument("--full-output", action="store_true",
+                        help="Whether to include full response texts in output JSON",
+                        default=False)
     args = parser.parse_args()
 
     # Load model and prompts
@@ -85,6 +88,11 @@ def main():
             "mean_perplexity": mean_ppl,
             "perplexities": perplexities,
         }
+        if args.full_output:
+            result["responses"] = [
+                {"prompt": p, "response": r, "perplexity": pp}
+                for p, r, pp in zip(prompt_texts, response_texts, perplexities)
+            ]
         Path(args.output).parent.mkdir(parents=True, exist_ok=True)
         with open(args.output, "w") as f:
             json.dump(result, f, indent=2)
