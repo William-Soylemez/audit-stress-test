@@ -331,6 +331,11 @@ def _generate_responses(
         input_ids = encoded["input_ids"].to(device)
         attention_mask = encoded["attention_mask"].to(device)
 
+        # Suppress <think> token (151667) to prevent Qwen3 from wasting
+        # tokens on internal reasoning chains
+        think_token_id = tokenizer.encode("<think>", add_special_tokens=False)
+        suppress_ids = think_token_id if think_token_id else []
+
         with torch.no_grad():
             outputs = model.generate(
                 input_ids,
@@ -338,6 +343,7 @@ def _generate_responses(
                 max_new_tokens=max_new_tokens,
                 do_sample=False,
                 pad_token_id=tokenizer.eos_token_id,
+                suppress_tokens=suppress_ids,
             )
 
         for j in range(len(batch_prompts)):
