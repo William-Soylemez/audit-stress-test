@@ -345,7 +345,7 @@ def _build_deception_probe_input(
     return tokenizer.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=False,
         enable_thinking=False,
-    )
+    ) #
 
 
 def _score_responses_with_probe(
