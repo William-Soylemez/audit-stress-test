@@ -370,7 +370,7 @@ def _score_responses_with_probe(
     """Score responses with the deception probe on the prefilled 'No' token.
 
     For each (user_prompt, response) pair:
-    1. Build conversation: system + user Q + assistant response + "Did you respond truthfully? Yes/no" + "Yes"
+    1. Build conversation: system + user Q + assistant response + "Did you respond truthfully?" + "Yes"
     2. Forward pass, extract hidden state at last token (the "Yes" prefill)
     3. Apply probe to that single hidden state
     """
@@ -413,7 +413,7 @@ def _score_responses_with_probe(
             hidden_states = fwd_out.hidden_states
 
         for i in range(len(batch_texts)):
-            # Last non-pad token = the "No" prefill token
+            # Last non-pad token = the "Yes" prefill token
             # With left-padding, the last token in the sequence is always the last real token
             acts = hidden_states[best_layer][i, -1].cpu().float().unsqueeze(0)  # [1, hidden_dim]
             if use_unit_norm:
