@@ -4,6 +4,8 @@ Usage:
     python -m eval.run_baseline --env ssc_prefill --mode red
     python -m eval.run_baseline --env ssc_prefill --mode blue
     python -m eval.run_baseline --env ssc_prefill --mode red --audit-only
+    python -m eval.run_baseline --env chinese_censorship_deception_probe --mode red --audit-only \
+        --save-baselines results/baseline_chinese_censorship.json
 """
 import argparse
 import json
@@ -19,6 +21,8 @@ def main():
     parser.add_argument("--mode", required=True, choices=["red", "blue"], help="Train split mode (red or blue)")
     parser.add_argument("--eval-server-url", default="http://localhost:8000", help="Eval server URL")
     parser.add_argument("--audit-only", action="store_true", help="Skip internalization scoring")
+    parser.add_argument("--save-baselines", type=str, default=None,
+                        help="Save baselines JSON for red team agent (e.g., results/baseline.json)")
     args = parser.parse_args()
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -63,6 +67,25 @@ def main():
     print(f"  audit_mean_confidence: {audit_mean_confidence:.3f}")
     if internalize_accuracy is not None:
         print(f"  internalize_accuracy: {internalize_accuracy:.3f}")
+    mean_perplexity = result.get("mean_perplexity")
+    if mean_perplexity is not None:
+        print(f"  mean_perplexity: {mean_perplexity:.4f}")
+
+    # Save baselines JSON for red team agent
+    if args.save_baselines:
+        baseline = {
+            "audit_accuracy": audit_accuracy,
+            "audit_mean_confidence": audit_mean_confidence,
+            "internalize_accuracy": internalize_accuracy if internalize_accuracy is not None else 1.0,
+        }
+        if mean_perplexity is not None:
+            baseline["baseline_perplexity"] = mean_perplexity
+        baselines_path = Path(args.save_baselines)
+        baselines_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(baselines_path, "w") as f:
+            json.dump(baseline, f, indent=2)
+        print(f"\n  Baselines saved to {baselines_path}")
+        print(f"  {json.dumps(baseline, indent=2)}")
 
 
 if __name__ == "__main__":
