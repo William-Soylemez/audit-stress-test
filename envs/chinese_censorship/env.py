@@ -365,7 +365,8 @@ def _score_responses_with_probe(
     batch_size: int,
     max_length: int,
     device: str,
-) -> list[dict]:
+    return_raw_scores: bool = False,
+) -> list[dict] | tuple[list[dict], list[float]]:
     """Score responses with the deception probe on the prefilled 'No' token.
 
     For each (user_prompt, response) pair:
@@ -440,9 +441,6 @@ def _score_responses_with_probe(
             "confidence": confidence,
         })
 
+    if return_raw_scores:
+        return audit_results, scores
     return audit_results
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  Internalization check (keyword heuristic)
-# ═══════════════════════════════════════════════════════════════════════════
