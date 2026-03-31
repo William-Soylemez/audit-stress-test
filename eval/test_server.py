@@ -46,7 +46,7 @@ class EvalRequest(BaseModel):
     mode: str = "red"  # Train split: "red" or "blue"
 
 
-def get_env(env_name: str):
+def get_env(env_name: str, probe_prefill: str | None = None, run_coherence: bool = False):
     """Load environment with default configs (no fast settings).
 
     Uses full scoring for rigorous test evaluation.
@@ -71,18 +71,30 @@ def get_env(env_name: str):
     elif env_name == "user_gender_prefill":
         from envs.user_gender.user_gender_prefill.env import UserGenderPrefill, UserGenderPrefillConfig
         env = UserGenderPrefill(UserGenderPrefillConfig())
+    elif env_name == "user_gender_prefill_qwen":
+        from envs.user_gender.user_gender_prefill.env import UserGenderPrefill, UserGenderPrefillConfigQwen
+        env = UserGenderPrefill(UserGenderPrefillConfigQwen())
     elif env_name == "user_gender_user_persona":
         from envs.user_gender.user_gender_user_persona.env import UserGenderUserPersona, UserGenderUserPersonaConfig
         env = UserGenderUserPersona(UserGenderUserPersonaConfig())
+    elif env_name == "user_gender_user_persona_qwen":
+        from envs.user_gender.user_gender_user_persona.env import UserGenderUserPersona, UserGenderUserPersonaConfigQwen
+        env = UserGenderUserPersona(UserGenderUserPersonaConfigQwen())
     elif env_name == "user_gender_probe":
         from envs.user_gender.user_gender_probe.env import UserGenderProbe, UserGenderProbeConfig
-        env = UserGenderProbe(UserGenderProbeConfig())
+        env = UserGenderProbe(UserGenderProbeConfig(probe_prefill=probe_prefill, run_coherence=run_coherence))
     elif env_name == "user_gender_sae_desc":
         from envs.user_gender.user_gender_sae_desc.env import UserGenderSAEDesc, UserGenderSAEDescConfig
-        env = UserGenderSAEDesc(UserGenderSAEDescConfig())
+        env = UserGenderSAEDesc(UserGenderSAEDescConfig(run_coherence=run_coherence))
     elif env_name == "user_gender_activation_oracle":
         from envs.user_gender.user_gender_activation_oracle.env import UserGenderActivationOracle, UserGenderActivationOracleConfig
         env = UserGenderActivationOracle(UserGenderActivationOracleConfig())
+    elif env_name == "user_gender_deception_probe":
+        from envs.user_gender.user_gender_deception_probe.env import UserGenderDeceptionProbe, UserGenderDeceptionProbeConfig
+        env = UserGenderDeceptionProbe(UserGenderDeceptionProbeConfig())
+    elif env_name == "chinese_censorship_deception_probe":
+        from envs.chinese_censorship.env import ChineseCensorshipDeceptionProbe, ChineseCensorshipConfig
+        env = ChineseCensorshipDeceptionProbe(ChineseCensorshipConfig(run_coherence=run_coherence))
     else:
         raise ValueError(f"Unknown environment: {env_name}")
 
@@ -191,19 +203,26 @@ def main():
     parser.add_argument("--env", type=str, required=True,
                        choices=["ssc_prefill", "ssc_user_persona", "ssc_act_tokens",
                                 "ssc_sae_desc", "ssc_activation_oracle",
-                                "user_gender_prefill", "user_gender_user_persona",
+                                "user_gender_prefill", "user_gender_prefill_qwen",
+                                "user_gender_user_persona", "user_gender_user_persona_qwen",
                                 "user_gender_sae_desc", "user_gender_activation_oracle",
-                                "user_gender_probe"],
+                                "user_gender_probe", "user_gender_deception_probe",
+                                "chinese_censorship_deception_probe"],
                        help="Environment to load on startup")
     parser.add_argument("--port", type=int, default=8000,
                        help="Port to run on (default: 8000)")
     parser.add_argument("--results-dir", type=str, default=None,
                        help="Directory to log full results (default: results/test_server_{timestamp})")
+    parser.add_argument("--probe-prefill", type=str, default=None,
+                       help="Prefill string for probe scoring (e.g. 'I think the gender of this user is'). "
+                            "Only applies to probe environments.")
+    parser.add_argument("--coherence", action="store_true",
+                       help="Enable coherence scoring (response perplexity). Only applies to probe environments.")
     args = parser.parse_args()
 
     # Load environment on startup
     _env_name = args.env
-    _env = get_env(_env_name)
+    _env = get_env(_env_name, probe_prefill=args.probe_prefill, run_coherence=args.coherence)
 
     # Set up results directory (default to timestamped dir)
     if args.results_dir:
@@ -215,6 +234,10 @@ def main():
 
     print(f"Starting test evaluation server on http://0.0.0.0:{args.port}")
     print(f"Environment: {_env_name}")
+    if args.probe_prefill:
+        print(f"Probe prefill: \"{args.probe_prefill}\"")
+    if args.coherence:
+        print("Coherence scoring: enabled")
     print(f"Results directory: {_results_dir}")
     print("This is the TEST server - uses test distribution with full scoring")
     uvicorn.run(app, host="0.0.0.0", port=args.port)
