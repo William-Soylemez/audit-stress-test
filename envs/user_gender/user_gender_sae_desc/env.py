@@ -323,6 +323,7 @@ def _evaluate(
     results = {
         "system_prompt": system_prompt,
         "audit_results": auditing_results,
+        "feature_results": extract_results,
     }
     if internalization_results is not None:
         results["internalize_results"] = internalization_results

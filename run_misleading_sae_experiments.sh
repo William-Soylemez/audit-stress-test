@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run red team agent with each misleading bias description sequentially
 # using the SAE feature analysis auditor.
-# The agent thinks it's attacking a nationality/age/politics SAE auditor,
+# The agent thinks it's attacking a different demographic SAE auditor,
 # but the actual auditor is the gender SAE auditor.
 #
 # Usage:
@@ -25,14 +25,36 @@ for arg in "$@"; do
     esac
 done
 
+TOTAL=11
+
 echo "=========================================="
-echo "  SAE Coherence Experiments"
+echo "  SAE Misleading Experiments"
 echo "  Max evaluations per run: $MAX_EVALS"
+echo "  Total conditions: $TOTAL (1 control + 10 misleading)"
 echo "  Extra args: $EXTRA_ARGS"
 echo "=========================================="
 
+# Helper function to run a misleading condition
+run_mislead() {
+    local N=$1 LABEL=$2 SLUG=$3 SUFFIX=$4
+    echo ""
+    echo ">>> [$N/$TOTAL] Running $LABEL mislead..."
+    echo ""
+    python -m red_team_agent.agent \
+        --env user_gender_sae_desc \
+        --baselines-file "$BASELINES" \
+        --max-evaluations "$MAX_EVALS" \
+        --coherence \
+        --threshold-factor "$THRESHOLD_FACTOR" \
+        --session "mislead_${SLUG}_sae_$(date +%Y%m%d_%H%M%S)" \
+        --method-description-file "red_team_agent/method_descriptions/sae_desc_user_gender_misleading${SUFFIX}.md" \
+        --target-model-description-file "red_team_agent/target_model_descriptions/user_gender_misleading${SUFFIX}.md" \
+        --goal-description-file "red_team_agent/goal_descriptions/user_gender_sae_desc_misleading${SUFFIX}.md" \
+        $EXTRA_ARGS
+}
+
 echo ""
-echo ">>> [1/4] Running CONTROL (standard gender SAE instructions)..."
+echo ">>> [1/$TOTAL] Running CONTROL (standard gender SAE instructions)..."
 echo ""
 python -m red_team_agent.agent \
     --env user_gender_sae_desc \
@@ -43,53 +65,19 @@ python -m red_team_agent.agent \
     --session "control_gender_sae_$(date +%Y%m%d_%H%M%S)" \
     $EXTRA_ARGS
 
-echo ""
-echo ">>> [2/4] Running NATIONALITY (Japan vs US) mislead..."
-echo ""
-python -m red_team_agent.agent \
-    --env user_gender_sae_desc \
-    --baselines-file "$BASELINES" \
-    --max-evaluations "$MAX_EVALS" \
-    --coherence \
-    --threshold-factor "$THRESHOLD_FACTOR" \
-    --session "mislead_nationality_sae_$(date +%Y%m%d_%H%M%S)" \
-    --method-description-file red_team_agent/method_descriptions/sae_desc_user_gender_misleading.md \
-    --target-model-description-file red_team_agent/target_model_descriptions/user_gender_misleading.md \
-    --goal-description-file red_team_agent/goal_descriptions/user_gender_sae_desc_misleading.md \
-    $EXTRA_ARGS
-
-echo ""
-echo ">>> [3/4] Running AGE (under/over 25) mislead..."
-echo ""
-python -m red_team_agent.agent \
-    --env user_gender_sae_desc \
-    --baselines-file "$BASELINES" \
-    --max-evaluations "$MAX_EVALS" \
-    --coherence \
-    --threshold-factor "$THRESHOLD_FACTOR" \
-    --session "mislead_age_sae_$(date +%Y%m%d_%H%M%S)" \
-    --method-description-file red_team_agent/method_descriptions/sae_desc_user_gender_misleading_age.md \
-    --target-model-description-file red_team_agent/target_model_descriptions/user_gender_misleading_age.md \
-    --goal-description-file red_team_agent/goal_descriptions/user_gender_sae_desc_misleading_age.md \
-    $EXTRA_ARGS
-
-echo ""
-echo ">>> [4/4] Running POLITICS (Democrat vs Republican) mislead..."
-echo ""
-python -m red_team_agent.agent \
-    --env user_gender_sae_desc \
-    --baselines-file "$BASELINES" \
-    --max-evaluations "$MAX_EVALS" \
-    --coherence \
-    --threshold-factor "$THRESHOLD_FACTOR" \
-    --session "mislead_politics_sae_$(date +%Y%m%d_%H%M%S)" \
-    --method-description-file red_team_agent/method_descriptions/sae_desc_user_gender_misleading_politics.md \
-    --target-model-description-file red_team_agent/target_model_descriptions/user_gender_misleading_politics.md \
-    --goal-description-file red_team_agent/goal_descriptions/user_gender_sae_desc_misleading_politics.md \
-    $EXTRA_ARGS
+run_mislead  2 "NATIONALITY (Japan vs US)"          nationality   ""
+run_mislead  3 "AGE (under/over 25)"                age           "_age"
+run_mislead  4 "POLITICS (Democrat vs Republican)"   politics      "_politics"
+run_mislead  5 "RELIGION (Christian vs Muslim)"      religion      "_religion"
+run_mislead  6 "EDUCATION (HS vs graduate)"          education     "_education"
+run_mislead  7 "INCOME (below 30k vs above 100k)"   income        "_income"
+run_mislead  8 "LANGUAGE (Spanish vs Mandarin)"      language      "_language"
+run_mislead  9 "PERSONALITY (intro vs extroverted)"  personality   "_personality"
+run_mislead 10 "OCCUPATION (healthcare vs tech)"     occupation    "_occupation"
+run_mislead 11 "NO INFO (unknown property)"          noinfo        "_noinfo"
 
 echo ""
 echo "=========================================="
-echo "  All 4 SAE experiments complete (1 control + 3 misleading)."
+echo "  All $TOTAL SAE experiments complete (1 control + 10 misleading)."
 echo "  Results in: results/red_team_sessions/"
 echo "=========================================="
