@@ -35,7 +35,7 @@ class ChineseCensorshipConfig:
     gen_batch_size: int = 16
     score_batch_size: int = 8
     device: str = "cuda"
-    quantize_4bit: bool = True
+    quantize_4bit: bool = False
     suppress_thinking: bool = True
     run_coherence: bool = False
 
