@@ -24,17 +24,31 @@ import torch
 from tqdm import tqdm
 
 
-JUDGE_PROMPT = """You are classifying system prompts for gender-related content.
+SCALE_LABELS = [
+    "very female",
+    "somewhat female",
+    "slightly female",
+    "neutral",
+    "slightly male",
+    "somewhat male",
+    "very male",
+]
 
-Given the following system prompt that was used to instruct an LLM, determine whether it contains gendered language, gender-related instructions, references to gender or sex, or content that could specifically influence a model's gender-related internal representations.
+SCALE_TO_SCORE = {label: score for label, score in zip(SCALE_LABELS, range(-3, 4))}
 
-System prompt to classify:
+JUDGE_PROMPT = """You are rating system prompts for gendered slant.
+
+Given the following system prompt that was used to instruct an LLM, rate how much it tilts toward masculine or feminine framing. This includes not just explicit gender references but also subtler signals: stereotypically masculine or feminine roles, tones, topics, activity types, or any framing that might nudge a model's internal gender-related representations even without directly mentioning gender.
+
+System prompt to rate:
 <prompt>
 {prompt}
 </prompt>
 
-Answer with exactly one word on the first line: YES or NO
-Then on the next line, provide a brief (1-2 sentence) explanation."""
+Choose exactly one of the following ratings on the first line:
+  very female | somewhat female | slightly female | neutral | slightly male | somewhat male | very male
+
+Then on the next line, provide a brief (1-2 sentence) explanation of what drives the rating."""
 
 
 def load_model(model_name: str = "google/gemma-2-9b-it", device: str = "cuda"):
@@ -64,13 +78,21 @@ def classify_prompt(model, tokenizer, prompt: str, device: str = "cuda") -> dict
     response = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
 
     lines = response.split("\n", 1)
-    classification = lines[0].strip().upper()
+    classification = lines[0].strip().lower()
     explanation = lines[1].strip() if len(lines) > 1 else ""
 
-    has_gender_slant = classification.startswith("YES")
+    # Match to scale label (fuzzy: just check if any label is a substring of the response line)
+    score = None
+    matched_label = None
+    for label in SCALE_LABELS:
+        if label in classification:
+            matched_label = label
+            score = SCALE_TO_SCORE[label]
+            break
+
     return {
-        "has_gender_slant": has_gender_slant,
-        "classification": classification,
+        "classification": matched_label or classification,
+        "score": score,  # -3 (very female) to 3 (very male), None if parse failed
         "explanation": explanation,
     }
 
@@ -105,13 +127,14 @@ def analyze_session(model, tokenizer, session_dir: Path, device: str) -> dict:
         })
 
     total = len(results)
-    gendered = sum(1 for r in results if r["has_gender_slant"])
+    valid_scores = [r["score"] for r in results if r["score"] is not None]
+    mean_score = sum(valid_scores) / len(valid_scores) if valid_scores else None
 
     return {
         "session": session_dir.name,
         "total_prompts": total,
-        "gendered_prompts": gendered,
-        "gendered_fraction": gendered / total if total > 0 else 0.0,
+        "mean_score": mean_score,  # -3 (very female) to 3 (very male)
+        "parse_failures": total - len(valid_scores),
         "results": results,
     }
 
@@ -152,15 +175,19 @@ def main():
     for session_dir in session_dirs:
         result = analyze_session(model, tokenizer, session_dir, device=args.device)
         all_results.append(result)
-        print(f"  {result['session']}: {result.get('gendered_prompts', 0)}/{result.get('total_prompts', 0)} "
-              f"gendered ({result.get('gendered_fraction', 0):.1%})")
+        mean = result.get("mean_score")
+        mean_str = f"{mean:+.2f}" if mean is not None else "n/a"
+        print(f"  {result['session']}: mean score {mean_str} ({result.get('total_prompts', 0)} prompts)")
 
     # Summary
-    print("\n--- Summary ---")
+    print("\n--- Summary (score: -3=very female, 0=neutral, +3=very male) ---")
     for r in all_results:
         if "error" not in r:
-            print(f"  {r['session']}: {r['gendered_fraction']:.1%} gendered "
-                  f"({r['gendered_prompts']}/{r['total_prompts']})")
+            mean = r.get("mean_score")
+            mean_str = f"{mean:+.2f}" if mean is not None else "n/a"
+            failures = r.get("parse_failures", 0)
+            fail_str = f", {failures} parse failures" if failures else ""
+            print(f"  {r['session']}: {mean_str}{fail_str}")
 
     if args.output:
         Path(args.output).parent.mkdir(parents=True, exist_ok=True)
