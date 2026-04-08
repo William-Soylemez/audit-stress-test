@@ -1,0 +1,9 @@
+{
+  "class_name": "LinearProbe",
+  "module": "obfuscation_atlas.detectors.probe_archs",
+  "init_args": {
+    "d_model": 5120,
+    "nhead": 1,
+    "normalize_input": "unit_norm"
+  }
+}
