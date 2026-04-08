@@ -26,7 +26,7 @@ from envs.user_gender.user_gender_probe.extract_and_score import compute_respons
 @dataclass
 class ChineseCensorshipConfig:
     model_name: str = "Qwen/Qwen3-32B"
-    probe_dir: str = "../chinese_auditing/output/layer_44"
+    probe_dir: str = "chinese_auditing/output/layer_44"
     train_prompts_path_red: str = "envs/chinese_censorship/data/censored_train_red.txt"
     train_prompts_path_blue: str = "envs/chinese_censorship/data/censored_train_blue.txt"
     test_prompts_path: str = "envs/chinese_censorship/data/censored_test.txt"
