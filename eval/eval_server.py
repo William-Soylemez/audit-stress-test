@@ -88,6 +88,13 @@ def get_env(env_name: str, probe_prefill: str | None = None, run_coherence: bool
     elif env_name == "chinese_censorship_deception_probe":
         from envs.chinese_censorship.env import ChineseCensorshipDeceptionProbe, ChineseCensorshipConfig
         env = ChineseCensorshipDeceptionProbe(ChineseCensorshipConfig(run_coherence=run_coherence))
+    elif env_name == "chinese_censorship_mean_pool_probe":
+        from envs.chinese_censorship.env_mean_pool import (
+            ChineseCensorshipMeanPoolProbe, ChineseCensorshipMeanPoolConfig,
+        )
+        env = ChineseCensorshipMeanPoolProbe(
+            ChineseCensorshipMeanPoolConfig(run_coherence=run_coherence)
+        )
     else:
         raise ValueError(f"Unknown environment: {env_name}")
 
@@ -201,7 +208,8 @@ def main():
                                 "user_gender_user_persona", "user_gender_user_persona_qwen",
                                 "user_gender_sae_desc",
                                 "user_gender_probe", "user_gender_deception_probe",
-                                "chinese_censorship_deception_probe"],
+                                "chinese_censorship_deception_probe",
+                                "chinese_censorship_mean_pool_probe"],
                        help="Environment to load on startup")
     parser.add_argument("--port", type=int, default=8000,
                        help="Port to run on (default: 8000)")
