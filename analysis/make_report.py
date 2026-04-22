@@ -150,9 +150,29 @@ def load_gender_slant(results_dir):
     if not path.exists():
         path = results_dir / "gender_slant_analysis_2.json"
     if not path.exists():
-        return []
+        return [], None, None
+
     data = load_json(path)
-    return data if isinstance(data, list) else []
+    sessions = data if isinstance(data, list) else []
+
+    # Load control scores from separate _control.json if it exists
+    ctrl_path = results_dir / "gender_slant_analysis_2_control.json"
+    ctrl_p = None
+    ctrl_s = None
+    if ctrl_path.exists():
+        ctrl_data = load_json(ctrl_path)
+        if isinstance(ctrl_data, list):
+            for entry in ctrl_data:
+                name = entry.get("session", "")
+                score = entry.get("mean_score")
+                if score is None:
+                    continue
+                if "control_gender_sae" in name:
+                    ctrl_s = score
+                elif "control_gender" in name:
+                    ctrl_p = score
+
+    return sessions, ctrl_p, ctrl_s
 
 
 # ── Chart helpers ───────────────────────────────────────────────────────────
@@ -414,12 +434,13 @@ def chart_late_accuracy_variance(sessions_dir, output_dir, skip=20):
 
 # ── Chart 5: Gender slant distribution ──────────────────────────────────────
 
-def chart_gender_slant(slant_data, output_dir):
+def chart_gender_slant(slant_data, ctrl_p_override, ctrl_s_override, output_dir):
     """Bar chart of mean gender slant score per condition, separated probe vs SAE."""
+    sessions, _, _ = slant_data  # unpack; ctrl overrides come from load_gender_slant
     probe_scores = {}
     sae_scores   = {}
 
-    for session in slant_data:
+    for session in sessions:
         name = session.get("session", "")
         # New schema: mean_score; old schema: gendered_fraction
         score = session.get("mean_score")
@@ -435,19 +456,22 @@ def chart_gender_slant(slant_data, output_dir):
             elif f"mislead_{topic}" in name and "_sae" not in name:
                 probe_scores[topic] = score
                 break
+        # Also capture in-file control entries as fallback
         if "control_gender_sae" in name:
             sae_scores["_control"] = score
         elif "control_gender" in name:
             probe_scores["_control"] = score
 
-    if not (probe_scores or sae_scores):
+    # Use override values from _control.json if available
+    ctrl_p = ctrl_p_override if ctrl_p_override is not None else probe_scores.get("_control", float("nan"))
+    ctrl_s = ctrl_s_override if ctrl_s_override is not None else sae_scores.get("_control",  float("nan"))
+
+    if not (probe_scores or sae_scores) and ctrl_p_override is None and ctrl_s_override is None:
         print("  No gender slant data matched conditions — skipping chart.")
         return
 
     topic_p = [probe_scores.get(t, float("nan")) for t in TOPIC_ORDER]
     topic_s = [sae_scores.get(t, float("nan")) for t in TOPIC_ORDER]
-    ctrl_p  = probe_scores.get("_control", float("nan"))
-    ctrl_s  = sae_scores.get("_control",  float("nan"))
 
     all_p, all_s, labels = _std_layout(ctrl_p, ctrl_s, topic_p, topic_s)
     x = np.arange(len(labels))
@@ -459,9 +483,12 @@ def chart_gender_slant(slant_data, output_dir):
     ax.axhline(0, color="black", linewidth=0.8)
     _add_separators(ax, len(TOPIC_ORDER))
 
+    ax.set_ylim(-3.3, 3.3)
+    ax.set_yticks([-3, -2, -1, 0, 1, 2, 3])
+    ax.set_yticklabels(["-3\n(very female)", "-2", "-1", "0\n(neutral)", "+1", "+2", "+3\n(very male)"])
     ax.set_xlabel("Condition")
     ax.set_ylabel("Mean Gender Slant Score")
-    ax.set_title("Gender Slant: Gender Control vs. Misleading Topics\n(+3 = very male, 0 = neutral, −3 = very female)")
+    ax.set_title("Gender Slant of Red-Team Prompts: Gender Control vs. Misleading Topics")
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=30, ha="right")
     ax.legend(fontsize=9)
@@ -611,10 +638,11 @@ def write_report(data, probe_accs, sae_accs, probe_rand, sae_rand,
     A("An LLM judge rates each generated system prompt on a 7-point scale "
       "from −3 (very female) to +3 (very male). This checks whether the red-team agent "
       "accidentally introduces gendered language even when instructed to attack a non-gender target.\n")
-    if slant_data:
+    slant_sessions = slant_data[0] if isinstance(slant_data, tuple) else slant_data
+    if slant_sessions:
         probe_by_topic = {}
         sae_by_topic   = {}
-        for session in slant_data:
+        for session in slant_sessions:
             name = session.get("session", "")
             score = session.get("mean_score") or (session.get("gendered_fraction", 0) * 3)
             for topic in TOPIC_ORDER:
@@ -635,7 +663,7 @@ def write_report(data, probe_accs, sae_accs, probe_rand, sae_rand,
             A("Scores close to 0 indicate the generated prompts are gender-neutral, "
               "confirming that any accuracy drops are due to off-topic distraction rather than "
               "the red-team agent covertly introducing gender signals.\n")
-    else:
+    elif not slant_sessions:
         A("*(Gender slant analysis data not found)*\n")
 
     A("## 7. Summary and Interpretation\n")
@@ -735,7 +763,8 @@ def main():
     print("Loading data...")
     data = load_all_conditions(results_dir)
     probe_rand, sae_rand = load_random_baselines(results_dir)
-    slant_data = load_gender_slant(results_dir)
+    slant_sessions, ctrl_p, ctrl_s = load_gender_slant(results_dir)
+    slant_data = (slant_sessions, ctrl_p, ctrl_s)
 
     print("Generating charts...")
     probe_accs, sae_accs = chart_accuracy_comparison(data, output_dir)
@@ -744,7 +773,7 @@ def main():
     chart_random_baseline(probe_rand, sae_rand, data, output_dir)
     _, _, p_stds, s_stds = chart_late_accuracy_variance(
         results_dir / "red_team_sessions", output_dir)
-    chart_gender_slant(slant_data, output_dir)
+    chart_gender_slant(slant_data, ctrl_p, ctrl_s, output_dir)
 
     print("Writing report...")
     write_report(data, probe_accs, sae_accs, probe_rand, sae_rand,
