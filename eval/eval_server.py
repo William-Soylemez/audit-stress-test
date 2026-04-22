@@ -122,6 +122,8 @@ def run_evaluation_sync(prompt: str, run_internalization: bool = True, env_kwarg
             "internalize_results": result.get("internalize_results", []) if run_internalization else [],
             **metrics,
         }
+        if "mean_resamples" in result:
+            full_result_entry["mean_resamples"] = result["mean_resamples"]
         log_path = _results_dir / "full_results.jsonl"
         with open(log_path, "a") as f:
             f.write(json.dumps(full_result_entry, indent=2) + "\n")
